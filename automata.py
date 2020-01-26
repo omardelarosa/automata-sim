@@ -13,6 +13,13 @@ DEAD_T = 0.0
 
 # NOTE: This could be fully vectorized
 class AutomataOptions:
+    # DEFAULT_UNIVERSE_GRID_SIZE = DEFAULT_UNIVERSE_GRID_SIZE
+    # DEFAULT_NEIGHBORHOOD_GRID_SIZE = DEFAULT_NEIGHBORHOOD_GRID_SIZE
+    # DEFAULT_STEPS = DEFAULT_STEPS
+    # DEFAULT_THRESHOLDS = DEFAULT_THRESHOLDS
+    # ALIVE_T = ALIVE_T
+    # DEAD_T = DEAD_T
+
     def __init__(
         self,
         universe_grid_size=DEFAULT_UNIVERSE_GRID_SIZE,
@@ -54,7 +61,7 @@ class Automata:
     def __repr__(self):
         return """
             Automata:
-                AutomataOptions: {}
+                {}
         """.format(
             self.options
         )
