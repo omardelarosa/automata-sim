@@ -90,7 +90,7 @@ class Automata:
 
         # # Make center of kernel dead
         self.kernel[floor(kernel_y / 2), floor(kernel_x / 2)] = self.DEAD_T
-        print("kernel: ", self.kernel)
+        ##print("kernel: ", self.kernel)
 
     def get_seed(self):
         """
@@ -200,6 +200,7 @@ class Automata:
         return {
             "score_max": max(self.scores),
             "score_min": min(self.scores),
+            "score_sum": sum(self.scores),
             "score_delta": self.scores[-1] - self.scores[0],
             "score_avg": np.average(self.scores),
             "steps_actual": self.steps_actual,
@@ -247,6 +248,7 @@ class Automata:
             exit(1)
 
         # This simulates a run
+        self.seed = states[0]
         self.states = states
         self.scores = scores
         # Represents all scorable states

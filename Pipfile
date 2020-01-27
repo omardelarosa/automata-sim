@@ -10,6 +10,7 @@ black = "*"
 numpy = "*"
 matplotlib = "*"
 scipy = "*"
+devo = {editable = true,git = "https://github.com/omardelarosa/Adaptive-DEs.git",ref = "pipenv-fixes"}
 
 [requires]
 python_version = "3.7"
