@@ -38,3 +38,17 @@ Run Conway's Game of Life for 200 steps:
 ```
 python cli.py --steps=200
 ```
+
+## Persisting Results
+
+### Saving
+
+```
+python cli.py --neighborhood-size 3 3 --save-to=examples/gol01/gol_ca
+```
+
+### Loading
+
+```
+python cli.py --neighborhood-size 3 3 --load-from=examples/gol01/gol_ca*.npy
+```

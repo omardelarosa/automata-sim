@@ -10,6 +10,7 @@ from automata import (
     ALIVE_T,
     DEAD_T,
 )
+import glob
 from plotter import Plotter
 
 # Default flags
@@ -95,6 +96,22 @@ parser.add_argument(
     help="Show params of automata after run. (default: {})".format(LOG_PARAMS),
 )
 
+parser.add_argument(
+    "--save-to",
+    type=str,
+    default="",
+    help="Save automata results to a given location. (default: '{}')".format(""),
+)
+
+parser.add_argument(
+    "--load-from",
+    type=str,
+    default="",
+    help="Load automata from given location (accepts globs). (default: '{}')".format(
+        ""
+    ),
+)
+
 args = parser.parse_args()
 
 should_animate = args.animate
@@ -116,13 +133,23 @@ a = Automata(opts)
 if args.log_params:
     print("\nparams:\n{}".format(a.options.to_dict()))
 
-# Run for n-steps
-a.run()
+if len(args.load_from):
+    load_path = args.load_from
+    files = glob.glob(load_path)
+    files.sort()
+    a.load(files)
+    # Load from filesystem
+else:
+    # Run for n-steps
+    a.run()
 
 if args.stats:
-    print("\nstats:\n{}".format(a.stats()))
+    print("\nstats:\n{}".format(a.to_dict()))
 
 if args.plot:
     # Plot result
     p = Plotter(a)
     p.plot(should_animate)
+
+if len(args.save_to):
+    a.save(args.save_to)

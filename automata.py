@@ -1,7 +1,8 @@
 import numpy as np
+import json
 from scipy.ndimage import convolve
 from scipy.stats import entropy
-from math import floor, ceil, sqrt
+from math import floor, ceil, sqrt, log
 
 # Default parameters as essentially GoL
 DEFAULT_UNIVERSE_GRID_SIZE = (100, 100)
@@ -54,6 +55,7 @@ class AutomataOptions:
             "thresholds": list(self.thresholds),
             "alive_t": self.alive_t,
             "dead_t": self.dead_t,
+            "steps": self.steps,
         }
 
 
@@ -196,7 +198,6 @@ class Automata:
 
     def stats(self):
         return {
-            "scores": self.scores,
             "score_max": max(self.scores),
             "score_min": min(self.scores),
             "score_delta": self.scores[-1] - self.scores[0],
@@ -204,5 +205,49 @@ class Automata:
             "steps_actual": self.steps_actual,
         }
 
+    def to_dict(self):
+        return {
+            "options": self.options.to_dict(),
+            "scores": self.scores,
+            "stats": self.stats(),
+        }
+
     def save(self, filename):
         print("Saving to: ", filename)
+        json_filename = filename + ".json"
+
+        # Save states
+        with open(json_filename, "w") as json_file:
+            json.dump(self.to_dict(), json_file)
+
+        # Save states
+        i = 1
+        zeros = int(log(self.steps, 10)) + 1
+        for s in self.states:
+            # padded filename
+            f_name = filename + str(i).zfill(zeros)
+            np.save(f_name, s)
+            i = i + 1
+
+    def load(self, files_array):
+        """
+        Load automata from directory
+        """
+        states = []
+        scores = []
+        for f in files_array:
+            print("Loading: ", f)
+            state = np.load(f)
+            score = self.evaluate(state)
+            scores.append(score)
+            states.append(state)
+
+        if len(scores) != len(states):
+            print("Unable to load automata from files")
+            exit(1)
+
+        # This simulates a run
+        self.states = states
+        self.scores = scores
+        # Represents all scorable states
+        self.steps_actual = len(scores)
