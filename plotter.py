@@ -10,8 +10,15 @@ class Plotter:
         fig = plt.figure()
 
         _fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+        _fig.tight_layout()
 
         ax1.set_title("Entropy")
+        # ax1.axis("equal")
+        ax1.set(
+            xlim=(0, len(self.automata.scores)),
+            ylim=(min(self.automata.scores), max(self.automata.scores)),
+        )
+
         ax2.set_title("Seed")
         ax3.set_title("Automata")
         ax1.plot(self.automata.scores)
@@ -22,7 +29,7 @@ class Plotter:
         self.i = 0
         im_automata = ax3.imshow(self.automata.states[-1], animated=True)
 
-        steps = len(self.automata.states)
+        steps = self.automata.steps_actual
         if should_animate == True:
             # Using animations - https://matplotlib.org/3.1.1/gallery/animation/simple_anim.html
             def update_figure(*args):
