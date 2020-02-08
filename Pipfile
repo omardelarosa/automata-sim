@@ -11,6 +11,7 @@ numpy = "*"
 matplotlib = "*"
 scipy = "*"
 devo = {editable = true,git = "https://github.com/omardelarosa/Adaptive-DEs.git",ref = "pipenv-fixes"}
+pypianoroll = "*"
 
 [requires]
 python_version = "3.7"
