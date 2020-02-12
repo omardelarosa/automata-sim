@@ -24,6 +24,9 @@ Assuming all of the above premises, we can begin to generalize 1-D automata as a
 
 ### 2-D Kernel Function for Images
 
+![Fukushima](http://www.scholarpedia.org/w/images/thumb/e/ef/ScholarFig2.gif/350px-ScholarFig2.gif)
+_Fukushima's model of pattern recognition using the neurocognitron_
+
 The _kernel_ function of our generalized ECA can be thought of as the operation of analyzing the local neighborhood of a cell in a single operation.
 
 The history of this technique comes from [Fukushima](http://www.scholarpedia.org/article/Neocognitron)'s Neurocognitron and made its way into image processing. Using the kernel function technique that a single, computationally inexpensive operation can be applied over each pixel to create a transformation of the image. This includes transformations such as _blurring_ or _edge detection_.
@@ -101,30 +104,30 @@ s_1 =
 
 _NOTE: this assumes $0$ at boundary conditions._
 
-This process can also be repeated over and over to produce a never ending series of transformations over the original sequence $s_0$.
+This process can also be repeated over and over to produce a never ending series of transformations over the original sequence $s_0$, visualized here as matrix $S$
 
 ```math
-s_2 =
+S = s_{0...n} =
 \begin{bmatrix}
+0 & 4  & 1 & 0 & 0 & 3 \\
 8 & 6 & 9 & 2 & 6 & 3 \\
-\end{bmatrix}
-```
-
-```math
-s_3 =
-\begin{bmatrix}
 20 & 40 & 25 & 32 & 16 & 15 \\
-\end{bmatrix}
-```
-
-```math
-s_4 =
-\begin{bmatrix}
 100 & 130 & 169 & 114 & 110 & 47 \\
+... & ... & ... & ... & ... & ... \\
+s_{n,i} & s_{n,i+1} & s_{n,i+2} & s_{n,i+3} & s_{n,i+4} & s_{n,i+5}
+\end{bmatrix}
+=
+\begin{bmatrix}
+s_0 \\
+s_1 \\
+s_2 \\
+s_3 \\
+... \\
+s_{n}
 \end{bmatrix}
 ```
 
-More generally, this can be expressed as the following recurrence relation:
+More generally, this can be expressed as the following recurrence relation where $s_n$ is the a row in $S$:
 
 ```math
 
@@ -134,8 +137,53 @@ s_n = \phi(s_{n-1})
 
 However, given this is an additive convolution, you can see the side-effect of an ever-increasing values of each element in the sequence. To fully express the more dynamic behaviors of CAs, we need to add the _activation function_
 
-## Activation Function
+### Activation Function
 
-## Bib
+Cellular automata transfer functions are inherently nonlinear. This makes nonlineary a crucial feature in the representation of ECAs. This nonlinearity requirement can best be expressed using two function classes _kernel_ and _activation_.
+
+Although [Novak](#bib) [[1](https://ieeexplore.ieee.org/abstract/document/5299278)] [[2](http://pcfarina.eng.unipr.it/Public/Presentations/NonLinear_Convolution.pdf)] demonstrated that nonlinearity can be described using only convolutional _kernel functions_ in signal processing, representing ECAs as a composition of _kernel_ and _activation_ provides more flexibility in _genotype_ encoding when using using evolutionary computation to search the parameter space of ECAs.
+
+### Expressing an Elementary Convolution Automata
+
+Concatenating the results of each state of $s_t$ as a row in the matrix $S$, you can see that Wolfram's _Rule 30_ thus emerges
+
+```math
+S =
+\begin{bmatrix}
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0\\
+0 & 0 & 0 & 0 & 1 & 1 & 1 & 0 & 0 & 0 & 0\\
+0 & 0 & 0 & 1 & 1 & 0 & 0 & 1 & 0 & 0 & 0\\
+0 & 0 & 1 & 1 & 0 & 1 & 1 & 1 & 1 & 0 & 0\\
+0 & 1 & 1 & 0 & 0 & 1 & 0 & 0 & 0 & 1 & 0\\
+1 & 1 & 0 & 1 & 1 & 1 & 1 & 0 & 1 & 1 & 1\\
+1 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0\\
+1 & 1 & 1 & 1 & 1 & 0 & 0 & 1 & 1 & 1 & 0\\
+1 & 0 & 0 & 0 & 0 & 1 & 1 & 1 & 0 & 0 & 1\\
+1 & 1 & 0 & 0 & 1 & 1 & 0 & 0 & 1 & 1 & 1\\
+1 & 0 & 1 & 1 & 1 & 0 & 1 & 1 & 1 & 0 & 0\\
+\end{bmatrix}
+```
+
+## Evolving Compound Rules
+
+By encoding the parameters and coefficients of the _activation function_ and the _kernel function_ as _genotypes_, the entire _rule space_ can be explored using evolutionary computation.
+
+### Objective Function
+
+TBD (Describe objective function)
+
+### Initial States
+
+TBD (Describe the initial states to be tested)
+
+## Pattern-Producing Convolutional Automata
+
+### Aesthetic Objective Functions
+
+TBD (music evaluation?)
+
+### Phenotypes
+
+# BibTex
 
 TBD

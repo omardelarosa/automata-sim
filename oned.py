@@ -126,6 +126,10 @@ def run(steps, seed=seed, kernel=kernel, f=f):
 
 # Example when run as main
 if __name__ == "__main__":
-    seed = np.array([1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0])
+    # seed = np.array([1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0])
+    seed = np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0])
     # TODO: do something with results
-    run(10, seed=seed, kernel=primes_kernel, f=wolfram)
+    states = run(10, seed=seed, kernel=primes_kernel, f=wolfram)
+    # # Pretty print for LaTex
+    # for s in states:
+    #     print(" & ".join(map(str, s.tolist())) + "\\")
