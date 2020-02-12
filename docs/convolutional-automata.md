@@ -139,13 +139,88 @@ However, given this is an additive convolution, you can see the side-effect of a
 
 ### Activation Function
 
-Cellular automata transfer functions are inherently nonlinear. This makes nonlineary a crucial feature in the representation of ECAs. This nonlinearity requirement can best be expressed using two function classes _kernel_ and _activation_.
+For our purposes, an _activation function_ is simply a secondary function that is applied element-wise over a single cell in our state space _independent_ of neighborhood and _after_ the _kernel_ is applied. Or more generally, given a _kernel_ function $g$ and an activation function $\lambda$, the resulting state $h$ can be expressed as:
+
+```math
+h(x) = \lambda \circ g
+```
+
+or:
+
+```math
+h(x) = \lambda(g(x)) = \lambda(\omega' * f(x)) = \lambda(\sum_{s=-a}^{a} \omega(s) f(x - s))
+```
+
+This has the effect of adding nonlinearity to the _kernel_ function.
+
+Why is nonlinearity necessary? Cellular automata transfer functions represent nonlinear transformations over the state-space and CAs model nonlinear systems. This makes nonlineary a crucial feature in the representation of ECAs and their state transitions. CA and ECA state transitions are distinct from signal processing transformations such as blurring or edge-detection, which a single _kernel_ can sufficently express in linear terms.
 
 Although [Novak](#bib) [[1](https://ieeexplore.ieee.org/abstract/document/5299278)] [[2](http://pcfarina.eng.unipr.it/Public/Presentations/NonLinear_Convolution.pdf)] demonstrated that nonlinearity can be described using only convolutional _kernel functions_ in signal processing, representing ECAs as a composition of _kernel_ and _activation_ provides more flexibility in _genotype_ encoding when using using evolutionary computation to search the parameter space of ECAs.
 
-### Expressing an Elementary Convolution Automata
+## Describing an Elementary Convolution Automata
 
-Concatenating the results of each state of $s_t$ as a row in the matrix $S$, you can see that Wolfram's _Rule 30_ thus emerges
+Using this two-part architecture, we can begin to describe a fully-functional convolutional automata entirely by their _kernel_ and _activation_ components.
+
+[Wolfram](#bib) describes the numbered, elementary cellular automata as being composed of sets of pairs of bit-arrays representing all 256 possible configurations:
+
+![http://mathworld.wolfram.com/ElementaryCellularAutomaton.html](http://mathworld.wolfram.com/images/eps-gif/ElementaryCARules_900.gif)
+
+These can be turned into mappings between a binary, 3-tuple of on/off states such as $[1, 0, 1]$ and their respective resulting state in the next iteration of $1$ or $0$.
+
+The resulting _activation_ and _kernel_ for Rule 30 can be expressed with the 3-tuple being a set $P = \{a, b, c\}$, such that $a, b, c \in \mathbb{P}$ (i.e. they are all distinct from primes $\mathbb{P}$).
+
+To build the _activation function_ $f(x)$ we use a second set $Q$ consisting of all possible products of $a,b,c$ along with $0$:
+
+```math
+Q = \{
+    a,
+    b,
+    c,
+    ab,
+    bc,
+    ac,
+    abc,
+    0
+\}
+```
+
+The function $f(x)$ then maps inputs $x$, which are the result of applying _kernel_ $\phi$ to cell $x$, to a set $R_n$ where $R_n \subseteq Q$, a subset of $Q$ representing a particular elementary automata rule $n$.
+
+In the case of encoding _Rule 30_ to a single _activation_ function we get:
+
+```math
+
+\lambda = f(x) =
+\left\{
+    \begin{array}{ll}
+        1 & \quad x \in R_{30} \\
+        0 & \quad x \notin R_{30}
+    \end{array}
+\right.
+```
+
+Where:
+
+```math
+R_{30} = \{a, bc, b, c\}
+```
+
+This can be written in trivial code using the following values for _kernel_ $\phi$:
+
+```math
+\phi =
+\begin{bmatrix}
+2 & 3  & 5 \\
+\end{bmatrix}
+```
+
+Where $R_{30}$ is:
+
+```math
+R_{30} = \{2, 15, 3, 5 \}
+```
+
+Evaluating this for 10 timesteps, you can see that [Wolfram's _Rule 30_](http://mathworld.wolfram.com/Rule30.html) thus emerges
 
 ```math
 S =
@@ -162,11 +237,29 @@ S =
 1 & 1 & 0 & 0 & 1 & 1 & 0 & 0 & 1 & 1 & 1\\
 1 & 0 & 1 & 1 & 1 & 0 & 1 & 1 & 1 & 0 & 0\\
 \end{bmatrix}
+=
+\begin{bmatrix}
+s_0 \\
+s_1 \\
+s_2 \\
+s_3 \\
+s_4 \\
+s_5 \\
+s_6 \\
+s_7 \\
+s_8 \\
+s_9 \\
+s_{10} \\
+\end{bmatrix}
 ```
+
+From _Wolfram World_:
+
+![http://mathworld.wolfram.com/Rule30.html](http://mathworld.wolfram.com/images/eps-gif/ElementaryCARule030_1000.gif)
 
 ## Evolving Compound Rules
 
-By encoding the parameters and coefficients of the _activation function_ and the _kernel function_ as _genotypes_, the entire _rule space_ can be explored using evolutionary computation.
+By encoding the parameters and coefficients of the _activation function_ and the _kernel function_ as _genotypes_, the entire _rule space_ can be explored using .... TBD
 
 ### Objective Function
 
@@ -183,6 +276,8 @@ TBD (Describe the initial states to be tested)
 TBD (music evaluation?)
 
 ### Phenotypes
+
+TBD (piano from sequences)
 
 # BibTex
 
