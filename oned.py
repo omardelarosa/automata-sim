@@ -6,6 +6,7 @@ from automata import Automata, AutomataOptions
 
 seed = np.array([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0])
 kernel = np.array([-1.0, -2.0, 0.0, 2.0, 1.0])
+primes_kernel = np.array([2, 3, 5])
 
 print("seed: {}, kernel: {}".format(seed, kernel))
 a_b = convolve(seed, kernel)
@@ -92,13 +93,30 @@ def gol(x, k):
     return x
 
 
+def wolfram(x, k):
+    x_next = convolve(x, k, mode="constant")
+
+    a = k[0]
+    b = k[1]
+    c = k[2]
+
+    # These correspond to the 8 CA elementary masks
+    states = [a, b, c, a * b, b * c, a * b * c, a * c, 0]
+
+    rule_30 = [a, b * c, b, c]
+
+    matches = np.isin(x_next, rule_30)
+    x = np.where(matches, 1, 0)
+    return x
+
+
 def run(steps, seed=seed, kernel=kernel, f=f):
     results = [seed]
     a_b = seed
     for i in range(steps):
         a_b = f(a_b, kernel)
         r = a_b.copy()
-        # print("{}: {}".format(i, r))
+        print("{}: {}".format(i, r))
         results.append(r)
     return results
 
@@ -108,5 +126,6 @@ def run(steps, seed=seed, kernel=kernel, f=f):
 
 # Example when run as main
 if __name__ == "__main__":
+    seed = np.array([1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0])
     # TODO: do something with results
-    run(10)
+    run(10, seed=seed, kernel=primes_kernel, f=wolfram)
