@@ -8,6 +8,19 @@ seed = np.array([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0])
 kernel = np.array([-1.0, -2.0, 0.0, 2.0, 1.0])
 primes_kernel = np.array([2, 3, 5])
 
+# seed = np.array([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0])
+
+
+seed = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0, 0, 0, 0])
+ones = np.full((0, len(seed)), 1).squeeze()
+zeros = np.full((0, len(seed)), 0).squeeze()
+
+# seed = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+# kernel = np.array([-1.0, -2.0, 0.0, 2.0, 1.0])
+# kernel = np.array([0.5, 0.5, 0.5, 0, 0.5, 0.5, 0.5])
+# kernel = np.array([-0.5, -1, -1, 0, 1, 1, 0.5])
+# kernel = np.array([1, 1, 1, 0, 1, 1, 1])
+
 print("seed: {}, kernel: {}".format(seed, kernel))
 a_b = convolve(seed, kernel)
 
@@ -84,13 +97,25 @@ def f(x, k):
 
 
 def gol(x, k):
-    neighbors = convolve(x, k, mode="constant")
-    alive = np.logical_or(
-        np.logical_and(x == 0.0, np.logical_and(neighbors > 3),),
-        np.logical_and(x >= 1.0, np.logical_and(neighbors >= 2, neighbors <= 3)),
-    )
-    x = np.where(alive, 1.0, 0.0)
-    return x
+    x_next = convolve(x, k, mode="constant")
+    # Activation Function 1: - binary
+    # res = np.array(x_next * (x_next > 0) > 0, dtype=int)
+
+    # Activation Function 2: based on population
+    res = np.array(x_next * (x_next > 1) * (x_next < 3), dtype=bool).astype(int)
+
+    # print("res: ", res)
+    return res
+
+
+# def gol(x, k):
+#     neighbors = convolve(x, k, mode="constant")
+#     alive = np.logical_or(
+#         np.logical_and(x == 0.0, np.logical_and(neighbors > 1),),
+#         np.logical_and(x >= 1.0, np.logical_and(neighbors >= 0, neighbors <= 1)),
+#     )
+#     x = np.where(alive, 1.0, 0.0)
+#     return x
 
 
 def wolfram(x, k):
@@ -133,3 +158,4 @@ if __name__ == "__main__":
     # # Pretty print for LaTex
     # for s in states:
     #     print(" & ".join(map(str, s.tolist())) + "\\")
+
