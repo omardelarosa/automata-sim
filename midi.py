@@ -10,6 +10,8 @@ from oned import (
     wolfram,
     learn_rules_from_states,
     tens,
+    generate_states_from_learned_rule,
+    print_states,
 )
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
@@ -57,6 +59,25 @@ def generate_pianoroll(
     return pianoroll
 
 
+def generate_pianoroll_chromatic(states, steps=steps, beat_duration=beat_duration):
+    pianoroll = np.zeros((steps * beat_duration, 128))
+
+    scale = np.array(range(0, 128))
+
+    for t in range(steps):
+        state = states[t]
+        beat = scale * np.array(state)
+        beat_list = [int(x) for x in beat.tolist()]
+        # print("{} -> {}".format(state, beat_list))
+        beat_idx = t * beat_duration
+        pianoroll[beat_idx, beat_list] = 100
+
+    # Clear 0s
+    pianoroll[0 : (steps * beat_duration), 0] = 0
+
+    return pianoroll
+
+
 def get_states_from_file(f_name, track_num=None):
     mt = load(f_name)
 
@@ -77,13 +98,42 @@ def get_states_from_file(f_name, track_num=None):
         if sum_s > 0:
             states.append(s)
 
+    # print_states(states[0:100])
     # mets = metrics(states)
     print("States read from file: ", f_name)
     # print(mets, learn_rules_from_states)
 
-    rules = learn_rules_from_states(states)
+    rule = learn_rules_from_states(states, 3)
+    # print(rule)
+    write_rule_to_json(rule, f_name.replace(".", "_"))
 
-    print(rules)
+    seeds = [states[0:100][3], states[0:100][20], states[0:100][40]]
+
+    i = 0
+    for seed in seeds:
+        states = generate_states_from_learned_rule(96, np.array(seed), rule)
+        print_states(states)
+        mets = metrics(states)
+        # print(mets)
+        f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
+        write_files_from_states(
+            states, mets, seed, [], f_name_out, g=generate_pianoroll_chromatic
+        )
+        i += 1
+
+
+def write_rule_to_json(rule, f_name):
+    json_file = "{f_name}_.{ext}".format(f_name=f_name, ext="json")
+    d = {}
+    d["k"] = list(map(str, rule["k"]))
+    d["rule"] = {}
+    for key in rule["rule"]:
+        d["rule"][str(key)] = rule["rule"][key]
+    print(d)
+    print("Writing Rule to: {}".format(json_file))
+    # Save state info as json_file
+    with open(json_file, "w") as json_file:
+        json.dump(d, json_file)
 
 
 def write_files_from_states(
@@ -93,9 +143,10 @@ def write_files_from_states(
     kernel,
     f_name="./renderings/midi/t",
     title="my awesome piano",
+    g=generate_pianoroll,
 ):
     # TODO: make it possible to alter parameters more easily
-    pianoroll = generate_pianoroll(states)
+    pianoroll = g(states)
 
     # Create a `pypianoroll.Track` instance
     track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
@@ -112,9 +163,9 @@ def write_files_from_states(
 
     stats = {
         "metrics": metrics,
-        "states": [list(s) for s in states],
-        "seed": list(seed),
-        "kernel": list(kernel),
+        # "states": [list(s) for s in states],
+        # "seed": list(seed),
+        # "kernel": list(kernel),
     }
 
     print("Writing results: {}".format(json_file))

@@ -68,16 +68,18 @@ def generate_combined_products(primes_list):
 
 def learn_rules_from_states(states, kernel_radius=1):
     # generate a kernel based on radius
-    # kernel = primes((kernel_radius * 2) + 1)
-
-    k = [1, 10, 100]
+    k_len = (kernel_radius * 2) + 1
+    # kernel = primes(k_len)
+    k = tens(k_len)
+    # k = [1, 10, 100, 1000, 10000]
 
     k_states = generate_combined_products(k) + [0]
-    print("k_states: ", k_states)
+    # print("k_states: ", k_states)
+    # only track non-zero
     counts_dict = {}
-    for key in k_states:
-        # count number of next states, 0 = Falses, 1 = Trues
-        counts_dict[key] = [0, 0]
+    # for key in k_states:
+    # count number of next states, 0 = Falses, 1 = Trues
+    # counts_dict[key] = [0, 0]
 
     # 1. iterate over all states learning transitions
     n = len(states)
@@ -93,11 +95,59 @@ def learn_rules_from_states(states, kernel_radius=1):
             x_plus_1_i = x_plus_1[j]  # next transition
             # print("x_patt_i: ", x_patt_i)
             # return
-            counts_dict[x_patt_i][x_plus_1_i] = counts_dict[x_patt_i][x_plus_1_i] + 1
+            if x_patt_i in counts_dict:
+                counts_dict[x_patt_i][x_plus_1_i] = (
+                    counts_dict[x_patt_i][x_plus_1_i] + 1
+                )
+            else:
+                counts = [0, 0]
+                counts[x_plus_1_i] = 1
+                counts_dict[x_patt_i] = counts
 
         # Find match for x-pattern
 
-    return {"k": k, "k_states": k_states, "rules": counts_dict}
+    # create a dictionary of likelihood value will be 1
+    rule = {}
+    for n in counts_dict:
+        v = counts_dict[n]
+        rule[n] = np.float64(v[1]) / np.sum(v, dtype=np.float64)
+
+    return {"k": k, "rule": rule}
+
+
+def generate_states_from_learned_rule(steps, seed, rule):
+    """
+    learned_rule:  { k, rules: counts_dict }
+    """
+    states = [seed]
+    for i in range(1, steps):
+        state = state_from_rule(states[-1], rule)
+        states.append(state)
+    return states
+
+
+def state_from_rule(x, learned_rule):
+    """
+    """
+    k = learned_rule["k"]
+    # print("k", k)
+    rule = learned_rule["rule"]
+    # print("x", x)
+    x_next = convolve(x, k, mode="constant")
+    result = np.zeros(x.shape)
+    for i in range(len(result)):
+        n = x_next[i]
+        if n in rule:
+            random_value = np.random.rand()
+            # check against rule prob
+            if random_value < rule[n]:
+                result[i] = 1
+            # not necessary, but being explicit
+            else:
+                result[i] = 0
+    # matches = np.isin(x_next, states_arr)
+    # result = np.where(matches, 1, 0)
+    return result
 
 
 def encode_state(s):
@@ -236,6 +286,11 @@ def run(steps, seed=seed, kernel=kernel, f=f):
         print("{}: {}".format(i + 1, r))
         results.append(r)
     return results
+
+
+def print_states(states):
+    for i in range(len(states)):
+        print("{}: {}".format(i, states[i]))
 
 
 # class OneD(Automata):
