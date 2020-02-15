@@ -1,7 +1,8 @@
 import numpy as np
 
-MAJOR_SCALE_MASK = np.array([0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1], bool)
-MINOR_SCALE_MASK = np.array([1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1], bool)
+MINOR_SCALE_MASK = np.array([0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1], bool)
+MAJOR_SCALE_MASK = np.array([1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1], bool)
+
 
 C_maj_scale = np.array(
     [

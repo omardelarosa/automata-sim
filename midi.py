@@ -18,7 +18,15 @@ from aggregate import aggregate_summary, plot_summary
 from scipy.stats import entropy
 from scipy.optimize import differential_evolution as de
 from itertools import product
-from constants import C_maj_scale, C_maj_scale_ext, seed_01, seed_02, seed_03
+from constants import (
+    C_maj_scale,
+    C_maj_scale_ext,
+    seed_01,
+    seed_02,
+    seed_03,
+    MINOR_SCALE_MASK,
+    MAJOR_SCALE_MASK,
+)
 import json
 import time
 import argparse
@@ -38,6 +46,16 @@ kernel_02 = np.array([0.5, 0.5, 0.0, 0.5, 0.5])
 
 
 # bounds = [(-1.0, 1.0), (-2.0, 2.0), (-3.0, 3.0), (-4.0, 4.0), (0, 0), (-4.0, 4.0), (-3.0, 3.0), (-2.0, 2.0), (-1.0, 1.0)]
+
+
+def get_full_scale(n=0, major=True, num_octaves=11):
+    if not major:
+        mask = MINOR_SCALE_MASK
+    else:
+        mask = MAJOR_SCALE_MASK
+
+    shifted = np.roll(mask, n)
+    return np.tile(shifted, num_octaves)[0:128]
 
 
 def generate_pianoroll(
@@ -78,7 +96,12 @@ def generate_pianoroll_chromatic(states, steps=steps, beat_duration=beat_duratio
     return pianoroll
 
 
-def get_states_from_file(f_name, track_num=None):
+def squash_state_to_scale(state, sc_mask):
+    s_compressed = state[sc_mask]
+    return s_compressed
+
+
+def get_states_from_file(f_name, track_num=None, scale_num=None, scale_type="maj"):
     mt = load(f_name)
 
     # convert to binary representation
@@ -88,6 +111,15 @@ def get_states_from_file(f_name, track_num=None):
     if track_num:
         track = mt.tracks[track_num]
 
+    sc_num = scale_num
+    sc_type = scale_type
+
+    if scale_num != None:
+        scale_mask = get_full_scale(sc_num)
+        n = np.array(range(0, 128))
+        scale = n[scale_mask]
+        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+
     # NOTE: these are the dimensions
     # rows = timestep, cols = keyboard
     # print(track.shape)
@@ -96,18 +128,29 @@ def get_states_from_file(f_name, track_num=None):
         # Skip rests by only taking tracks with non-zero sums
         sum_s = np.sum(s)
         if sum_s > 0:
-            states.append(s)
-
-    # print_states(states[0:100])
+            # compress to scale
+            if sc_num != None:
+                s_compressed = squash_state_to_scale(s, scale_mask)
+                states.append(s_compressed)
+            else:
+                states.append(s)
+    print("States generated")
+    print_states(states[0:100])
+    # return
     # mets = metrics(states)
     print("States read from file: ", f_name)
     # print(mets, learn_rules_from_states)
 
-    rule = learn_rules_from_states(states, 3)
-    # print(rule)
+    rule = learn_rules_from_states(states, 5)
+    print(rule)
     write_rule_to_json(rule, f_name.replace(".", "_"))
 
     seeds = [states[0:100][3], states[0:100][20], states[0:100][40]]
+    if sc_num != None:
+        maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
+            0 : (len(states[0]))
+        ]
+        seeds.append(maj_triad)
 
     i = 0
     for seed in seeds:
@@ -116,9 +159,11 @@ def get_states_from_file(f_name, track_num=None):
         mets = metrics(states)
         # print(mets)
         f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
-        write_files_from_states(
-            states, mets, seed, [], f_name_out, g=generate_pianoroll_chromatic
-        )
+        if sc_num != None:
+            g = lambda x, y, z: generate_pianoroll(x, y, z, scale)
+        else:
+            g = lambda x, y, z: generate_pianoroll_chromatic(x, y, z)
+        write_files_from_states(states, mets, seed, [], f_name_out, g=g)
         i += 1
 
 
@@ -146,7 +191,7 @@ def write_files_from_states(
     g=generate_pianoroll,
 ):
     # TODO: make it possible to alter parameters more easily
-    pianoroll = g(states)
+    pianoroll = g(states, steps, beat_duration)
 
     # Create a `pypianoroll.Track` instance
     track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
@@ -481,6 +526,18 @@ parser.add_argument(
     help="Select which track to read from in a midifile.",
 )
 
+parser.add_argument(
+    "--scaleNum", metavar="SN", type=int, default=None, help="Select scale 0-12",
+)
+
+parser.add_argument(
+    "--scaleType",
+    metavar="ST",
+    type=str,
+    default="maj",
+    help="Select scale type: [maj, min]",
+)
+
 args = parser.parse_args()
 
 f_dir = DEFAULT_OUTDIR
@@ -493,7 +550,7 @@ if args.mode == MODES[3]:
     exit(0)
 
 if args.load:
-    get_states_from_file(args.load, args.track)
+    get_states_from_file(args.load, args.track, args.scaleNum, args.scaleType)
     exit(0)
 
 # Mutually exclusive modes

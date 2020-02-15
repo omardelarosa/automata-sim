@@ -130,14 +130,13 @@ def state_from_rule(x, learned_rule):
     """
     """
     k = learned_rule["k"]
-    # print("k", k)
     rule = learned_rule["rule"]
-    # print("x", x)
     x_next = convolve(x, k, mode="constant")
     result = np.zeros(x.shape)
     for i in range(len(result)):
         n = x_next[i]
         if n in rule:
+            ## Option 1. Random:
             random_value = np.random.rand()
             # check against rule prob
             if random_value < rule[n]:
@@ -145,8 +144,6 @@ def state_from_rule(x, learned_rule):
             # not necessary, but being explicit
             else:
                 result[i] = 0
-    # matches = np.isin(x_next, states_arr)
-    # result = np.where(matches, 1, 0)
     return result
 
 
