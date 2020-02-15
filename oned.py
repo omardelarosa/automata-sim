@@ -28,7 +28,7 @@ zeros = np.full((0, len(seed)), 0).squeeze()
 # kernel = np.array([-0.5, -1, -1, 0, 1, 1, 0.5])
 # kernel = np.array([1, 1, 1, 0, 1, 1, 1])
 
-print("seed: {}, kernel: {}".format(seed, kernel))
+# print("seed: {}, kernel: {}".format(seed, kernel))
 a_b = convolve(seed, kernel)
 
 results = []
@@ -156,11 +156,11 @@ def rule_30():
     # k_states is all the combinations of products of k
     k_states = np.array(generate_combined_products(k) + [0])
 
+    width = 32
     # seed is initial state
-    seed = np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0])
+    seed = np.zeros((width,), dtype=int)
+    seed[floor(width / 2)] = 1  # add 1 to middle
 
-    # print("K_states", k_states)
-    # a is the "rule" bit array
     a = np.array([True, False, False, False, True, True, True, False])
 
     # this is the callback
@@ -168,14 +168,14 @@ def rule_30():
         return wolfram(x, k, a, k_states)
 
     # TODO: do something with results
-    states = run(10, seed=seed, kernel=primes_kernel, f=r30)
+    states = run(width, seed=seed, kernel=primes_kernel, f=r30)
 
     mets = metrics(states)
 
     print("Metrics: ", mets)
     # # Pretty print for LaTex
-    for s in states:
-        print(" & ".join(map(str, s.tolist())) + "\\")
+    # for s in states:
+    #     print(" & ".join(map(str, s.tolist())) + "\\")
 
 
 def wolfram(x, k, a, k_states=None):
@@ -189,17 +189,18 @@ def wolfram(x, k, a, k_states=None):
     states_arr = k_states[a]
 
     matches = np.isin(x_next, states_arr)
-    x = np.where(matches, 1, 0)
-    return x
+    result = np.where(matches, 1, 0)
+    return result
 
 
 def run(steps, seed=seed, kernel=kernel, f=f):
     results = [seed]
-    a_b = seed
+    a_b = np.copy(seed)
+    print("{}: {}".format(0, seed))
     for i in range(steps):
         a_b = f(a_b, kernel)
         r = a_b.copy()
-        print("{}: {}".format(i, r))
+        print("{}: {}".format(i + 1, r))
         results.append(r)
     return results
 
