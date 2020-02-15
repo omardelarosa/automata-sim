@@ -47,14 +47,57 @@ def primes(n):
     return ns
 
 
+def tens(n):
+    ns = [1]
+    if n == 1:
+        return ns
+    for i in range(1, n):
+        ns.append(10 ** i)
+    return ns
+
+
 def generate_combined_products(primes_list):
     l_primes = len(primes_list)
     c = list(combinations_with_replacement(primes_list, l_primes))
     # dedupe
     cc = list(map(lambda x: np.unique(x).tolist(), c))
     ccc = np.unique(cc).tolist()
-    products = list(map(lambda x: reduce(lambda a, b: a * b, list(x)), ccc))
+    products = list(map(lambda x: reduce(lambda a, b: a + b, list(x)), ccc))
     return products
+
+
+def learn_rules_from_states(states, kernel_radius=1):
+    # generate a kernel based on radius
+    # kernel = primes((kernel_radius * 2) + 1)
+
+    k = [1, 10, 100]
+
+    k_states = generate_combined_products(k) + [0]
+    print("k_states: ", k_states)
+    counts_dict = {}
+    for key in k_states:
+        # count number of next states, 0 = Falses, 1 = Trues
+        counts_dict[key] = [0, 0]
+
+    # 1. iterate over all states learning transitions
+    n = len(states)
+    for i in range(n - 1):
+        x = states[i]
+        x_plus_1 = states[i + 1]
+        # Apply kernel to x
+        x_pattern = convolve(x, k, mode="constant")
+        # print(x_pattern)
+        # compare patterns to next state value
+        for j in range(len(x)):
+            x_patt_i = x_pattern[j]  # pattern encoding
+            x_plus_1_i = x_plus_1[j]  # next transition
+            # print("x_patt_i: ", x_patt_i)
+            # return
+            counts_dict[x_patt_i][x_plus_1_i] = counts_dict[x_patt_i][x_plus_1_i] + 1
+
+        # Find match for x-pattern
+
+    return {"k": k, "k_states": k_states, "rules": counts_dict}
 
 
 def encode_state(s):
@@ -137,21 +180,11 @@ def gol(x, k):
     return res
 
 
-# def gol(x, k):
-#     neighbors = convolve(x, k, mode="constant")
-#     alive = np.logical_or(
-#         np.logical_and(x == 0.0, np.logical_and(neighbors > 1),),
-#         np.logical_and(x >= 1.0, np.logical_and(neighbors >= 0, neighbors <= 1)),
-#     )
-#     x = np.where(alive, 1.0, 0.0)
-#     return x
-
-
 def rule_30():
     # States with 0 added
 
     # kernel is 3 consequtive primes
-    k = primes(3)
+    k = tens(3)
 
     # k_states is all the combinations of products of k
     k_states = np.array(generate_combined_products(k) + [0])
@@ -161,14 +194,15 @@ def rule_30():
     seed = np.zeros((width,), dtype=int)
     seed[floor(width / 2)] = 1  # add 1 to middle
 
-    a = np.array([True, False, False, False, True, True, True, False])
+    # k_states:  [1, 11, 111, 101, 10, 110, 100, 0]
+    a = np.array([1, 1, 0, 0, 1, 0, 1, 0], dtype=bool)
 
     # this is the callback
     def r30(x, k):
         return wolfram(x, k, a, k_states)
 
     # TODO: do something with results
-    states = run(width, seed=seed, kernel=primes_kernel, f=r30)
+    states = run(width, seed=seed, kernel=k, f=r30)
 
     mets = metrics(states)
 
@@ -187,7 +221,6 @@ def wolfram(x, k, a, k_states=None):
     x_next = convolve(x, k, mode="constant")
 
     states_arr = k_states[a]
-
     matches = np.isin(x_next, states_arr)
     result = np.where(matches, 1, 0)
     return result

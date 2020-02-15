@@ -1,12 +1,22 @@
 import numpy as np
-from pypianoroll import Multitrack, Track
+from pypianoroll import Multitrack, Track, load
 from matplotlib import pyplot as plt
-from oned import run, metrics, gol, primes, generate_combined_products, wolfram
+from oned import (
+    run,
+    metrics,
+    gol,
+    primes,
+    generate_combined_products,
+    wolfram,
+    learn_rules_from_states,
+    tens,
+)
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
 from scipy.stats import entropy
 from scipy.optimize import differential_evolution as de
 from itertools import product
+from constants import C_maj_scale, C_maj_scale_ext, seed_01, seed_02, seed_03
 import json
 import time
 import argparse
@@ -20,168 +30,11 @@ steps = 96
 beat_duration = 16
 
 
-# C notes chord
-seed_01 = np.array(
-    [
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,  # octave 0
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,  # octave 1
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,  # octave 2
-    ]
-)
-
-# Random
-seed_02 = np.array(
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        1.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        0.0,
-        1.0,
-    ]
-)
-
-# Checkers
-seed_03 = np.array(
-    [
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,  # octave 0
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        0.0,  # octave 1
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,  # octave 2
-    ]
-)
-
-
 # kernel
 kernel_01 = np.array([-1.0, -2.0, 0.0, 2.0, 1.0])
 kernel_02 = np.array([0.5, 0.5, 0.0, 0.5, 0.5])
 
-C_maj_scale = np.array(
-    [
-        36,
-        38,
-        40,
-        41,
-        43,
-        45,
-        47,  # oct 0
-        48,
-        50,
-        52,
-        53,
-        55,
-        57,
-        59,  # oct 1
-        60,
-        62,
-        64,
-        65,
-        67,
-        69,
-        71,  # oct 2
-    ]
-)
 
-C_maj_scale_ext = np.array(
-    [
-        36,
-        38,
-        40,
-        41,
-        43,
-        45,
-        47,  # oct 0
-        48,
-        50,
-        52,
-        53,
-        55,
-        57,
-        59,  # oct 1
-        60,
-        62,
-        64,
-        65,
-        67,
-        69,
-        71,  # oct 2
-        72,
-        74,
-        76,
-        77,
-        79,
-        81,
-        83,  # oct 3
-        84,
-        86,
-        88,
-        89,
-    ]
-)
-
-# Kernel bounds
-bounds = [
-    (-4.0, 4.0),
-    (-4.0, 4.0),
-    (-4.0, 4.0),
-    (-4.0, 4.0),
-    # (-4.0, 4.0), # various values at center
-    (0, 0),  # always 0 at center
-    (-4.0, 4.0),
-    (-4.0, 4.0),
-    (-4.0, 4.0),
-    (-4.0, 4.0),
-]
 # bounds = [(-1.0, 1.0), (-2.0, 2.0), (-3.0, 3.0), (-4.0, 4.0), (0, 0), (-4.0, 4.0), (-3.0, 3.0), (-2.0, 2.0), (-1.0, 1.0)]
 
 
@@ -202,6 +55,35 @@ def generate_pianoroll(
     pianoroll[0 : (steps * beat_duration), 0] = 0
 
     return pianoroll
+
+
+def get_states_from_file(f_name, track_num=None):
+    mt = load(f_name)
+
+    # convert to binary representation
+    mt.binarize()
+
+    track = mt.get_merged_pianoroll()
+    if track_num:
+        track = mt.tracks[track_num]
+
+    # NOTE: these are the dimensions
+    # rows = timestep, cols = keyboard
+    # print(track.shape)
+    states = []
+    for s in track:
+        # Skip rests by only taking tracks with non-zero sums
+        sum_s = np.sum(s)
+        if sum_s > 0:
+            states.append(s)
+
+    # mets = metrics(states)
+    print("States read from file: ", f_name)
+    # print(mets, learn_rules_from_states)
+
+    rules = learn_rules_from_states(states)
+
+    print(rules)
 
 
 def write_files_from_states(
@@ -291,7 +173,7 @@ def plot_track(pianoroll, title="my awesome piano"):
 def generate_all_wolfram_eca(f_dir):
 
     # kernel is 3 consequtive primes
-    k = primes(3)
+    k = tens(3)
 
     # k_states is all the combinations of products of k
     k_states = np.array(generate_combined_products(k) + [0])
@@ -536,6 +418,18 @@ parser.add_argument(
     help="Optimizer or kernel space mode: (options: {})".format(MODES),
 )
 
+parser.add_argument(
+    "--load", metavar="F", type=str, default=None, help="Load states from a midi file."
+)
+
+parser.add_argument(
+    "--track",
+    metavar="T",
+    type=int,
+    default=0,
+    help="Select which track to read from in a midifile.",
+)
+
 args = parser.parse_args()
 
 f_dir = DEFAULT_OUTDIR
@@ -545,7 +439,11 @@ if args.outdir:
 
 if args.mode == MODES[3]:
     generate_all_wolfram_eca(f_dir)
-    exit(1)
+    exit(0)
+
+if args.load:
+    get_states_from_file(args.load, args.track)
+    exit(0)
 
 # Mutually exclusive modes
 if args.mode == MODES[1]:

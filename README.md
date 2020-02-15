@@ -52,3 +52,15 @@ python cli.py --neighborhood-size 3 3 --save-to=examples/gol01/gol_ca
 ```
 python cli.py --neighborhood-size 3 3 --load-from=examples/gol01/gol_ca*.npy
 ```
+
+## 1-D
+
+1-D automata can be generated and rendered to midi files.
+
+### Generate all Elementary Cellular Automata
+
+This is how all of Wolfram's 256 elementary automata would be generated
+
+```
+python midi.py --mode=wolfram --outdir ./renderings/midi/wolfram_eca_8bit
+```
