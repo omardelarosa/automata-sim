@@ -1,11 +1,12 @@
 import numpy as np
 from pypianoroll import Multitrack, Track
 from matplotlib import pyplot as plt
-from oned import run, metrics, gol
-from math import log
+from oned import run, metrics, gol, primes, generate_combined_products, wolfram
+from math import log, floor
 from aggregate import aggregate_summary, plot_summary
 from scipy.stats import entropy
 from scipy.optimize import differential_evolution as de
+from itertools import product
 import json
 import time
 import argparse
@@ -131,6 +132,43 @@ C_maj_scale = np.array(
     ]
 )
 
+C_maj_scale_ext = np.array(
+    [
+        36,
+        38,
+        40,
+        41,
+        43,
+        45,
+        47,  # oct 0
+        48,
+        50,
+        52,
+        53,
+        55,
+        57,
+        59,  # oct 1
+        60,
+        62,
+        64,
+        65,
+        67,
+        69,
+        71,  # oct 2
+        72,
+        74,
+        76,
+        77,
+        79,
+        81,
+        83,  # oct 3
+        84,
+        86,
+        88,
+        89,
+    ]
+)
+
 # Kernel bounds
 bounds = [
     (-4.0, 4.0),
@@ -147,12 +185,14 @@ bounds = [
 # bounds = [(-1.0, 1.0), (-2.0, 2.0), (-3.0, 3.0), (-4.0, 4.0), (0, 0), (-4.0, 4.0), (-3.0, 3.0), (-2.0, 2.0), (-1.0, 1.0)]
 
 
-def generate_pianoroll(states, steps=steps, beat_duration=beat_duration):
+def generate_pianoroll(
+    states, steps=steps, beat_duration=beat_duration, scale=C_maj_scale
+):
     pianoroll = np.zeros((steps * beat_duration, 128))
 
     for t in range(steps):
         state = states[t]
-        beat = C_maj_scale * np.array(state)
+        beat = scale * np.array(state)
         beat_list = [int(x) for x in beat.tolist()]
         # print("{} -> {}".format(state, beat_list))
         beat_idx = t * beat_duration
@@ -201,6 +241,44 @@ def write_files_from_states(
         json.dump(stats, json_file)
 
 
+def write_files_from_eca(
+    states,
+    metrics,
+    kernel,
+    activation,
+    f_name="./renderings/midi/t",
+    title="eca piano",
+):
+    # TODO: make it possible to alter parameters more easily
+    pianoroll = generate_pianoroll(states, scale=C_maj_scale_ext)
+
+    # Create a `pypianoroll.Track` instance
+    track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
+
+    mt = Multitrack(tracks=[track])
+
+    mid_file = "{f_name}_.{ext}".format(f_name=f_name, ext="mid")
+    json_file = "{f_name}_.{ext}".format(f_name=f_name, ext="json")
+
+    # Write MIDI file
+    mt.write(mid_file)
+
+    # Write JSON file
+
+    stats = {
+        "metrics": metrics,
+        "states": [s.astype(np.float32).tolist() for s in states],
+        "activation": list(activation),
+        "kernel": list(kernel),
+    }
+    # print("Stats:", stats)
+
+    print("Writing results: {}".format(json_file))
+    # Save state info as json_file
+    with open(json_file, "w") as json_file:
+        json.dump(stats, json_file)
+
+
 def plot_track(pianoroll, title="my awesome piano"):
     # Create a `pypianoroll.Track` instance
     track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
@@ -208,6 +286,97 @@ def plot_track(pianoroll, title="my awesome piano"):
     # Plot the pianoroll
     fig, ax = track.plot()
     plt.show()
+
+
+def generate_all_wolfram_eca(f_dir):
+
+    # kernel is 3 consequtive primes
+    k = primes(3)
+
+    # k_states is all the combinations of products of k
+    k_states = np.array(generate_combined_products(k) + [0])
+
+    width = 32
+    # seed is initial state
+    seed = np.zeros((width,), dtype=int)
+    seed[floor(width / 2)] = 1  # add 1 to middle
+
+    # generate cartesian product of all bit flags
+    bits = [False, True]
+
+    # the maximum length of the rule, aka 2^(len(k))
+    rule_size = 8
+
+    activations_arr = list(product(bits, repeat=rule_size))
+
+    # convert to numpy
+    activations = [np.array(a) for a in activations_arr]
+
+    # print(activations)
+
+    steps = 96  # note this is not square
+
+    # a = np.array([True, False, False, False, True, True, True, False])
+
+    activations_states_mets = []
+    # Iterate over all rules
+    for a in activations:
+        r = lambda x, k: wolfram(x, k, a, k_states)
+        states = run(steps, seed=seed, kernel=k, f=r)
+        mets = metrics(states)
+        # TODO: expand this for more than 8bits
+        n = np.packbits(a)
+        activations_states_mets.append((n, states, mets))
+
+    # do something with results
+    leading_zeroes = int(log(len(activations_states_mets), 3)) + 1
+    ts = int(time.time())
+    f_dir = "{}/t_{}_".format(f_dir, ts)
+    i = 0
+    pianorolls = []
+    for n, states, mets in activations_states_mets:
+        # stringify bits
+        a = ",".join(list(map(str, list(n))))
+        filename = "_i{}_a{}".format(
+            fmt_idx(i, leading_zeroes),  # seed idx
+            fmt_idx(a, leading_zeroes),  # kernel idx
+        )
+        f_name = f_dir + filename
+        # states = run(steps, seed, k, f=f)
+        # run_metrics = metrics(states)
+        write_files_from_eca(states, mets, k, a, f_name, title=f_name)
+        i += 1
+
+        # TODO: make it possible to alter parameters more easily
+        pianoroll = generate_pianoroll(states, scale=C_maj_scale_ext)
+        pianorolls.append((pianoroll, "{}_{}".format(i, a)))
+
+    tracks = []
+    for pianoroll, title in pianorolls:
+        # Create a `pypianoroll.Track` instance
+        track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
+        tracks.append(track)
+
+    # Summary midi file
+    mt = Multitrack(tracks=tracks)
+    mid_file = "{f_dir}__summary.{ext}".format(f_dir=f_dir, ext="mid")
+    mt.write(mid_file)
+
+    # plot_filename = "{f_dir}__summary.{ext}".format(f_dir=f_dir, ext="pdf")
+    # print("Generating plot: ", plot_filename)
+    # mt.plot()
+
+    # Save plot as PDF
+    # plt.savefig(plot_filename, dpi=150)
+
+    # plt.show()
+
+    # Aggregate results
+    aggregate_summary(f_dir)
+
+    # if plot:
+    #     # Plot aggregation
+    #     plot_summary(f_dir + "_summary.json")
 
 
 def evolve_kernel_using_de(steps, seed, mode="min", optimization_steps=None):
@@ -340,7 +509,7 @@ DEFAULT_OUTDIR = "./renderings/midi/kernel_space_3x1"
 
 parser = argparse.ArgumentParser(description="Run a 1-D cellular automata simulation.")
 
-MODES = ["optimizer", "kernel_space", "plot"]
+MODES = ["optimizer", "kernel_space", "plot", "wolfram"]
 
 # Args
 parser.add_argument(
@@ -374,6 +543,10 @@ f_dir = DEFAULT_OUTDIR
 if args.outdir:
     f_dir = args.outdir
 
+if args.mode == MODES[3]:
+    generate_all_wolfram_eca(f_dir)
+    exit(1)
+
 # Mutually exclusive modes
 if args.mode == MODES[1]:
     kernel_space = kernel_space_3_1()
@@ -405,7 +578,6 @@ elif args.mode == MODES[0]:
             k = evolve_kernel_using_de(steps, seed, m, optimization_steps)
             kernels.append(k)
         run_and_save(96, seeds, kernels, f_dir_k, plot=False)
-
 elif args.mode == MODES[2] and args.plotSummary:
     # Plot aggregation
     plot_summary(args.plotSummary)
