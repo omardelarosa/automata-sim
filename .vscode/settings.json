@@ -1,4 +1,3 @@
 {
-    "python.pythonPath": "/Users/odelarosa/Code/Projects/ds/search-personalization-models/venv/bin/python",
     "python.formatting.provider": "black"
 }
