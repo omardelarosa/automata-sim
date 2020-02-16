@@ -77,10 +77,12 @@ def generate_pianoroll(
     return pianoroll
 
 
-def generate_pianoroll_chromatic(states, steps=steps, beat_duration=beat_duration):
-    pianoroll = np.zeros((steps * beat_duration, 128))
+def generate_pianoroll_chromatic(
+    states, steps=steps, beat_duration=beat_duration, width=128
+):
+    pianoroll = np.zeros((steps * beat_duration, width))
 
-    scale = np.array(range(0, 128))
+    scale = np.array(range(0, width))
 
     for t in range(steps):
         state = states[t]
@@ -101,13 +103,30 @@ def squash_state_to_scale(state, sc_mask):
     return s_compressed
 
 
-def get_states_from_file(f_name, track_num=None, scale_num=None, scale_type="maj"):
+def squash_piano_roll_to_chromatic_frames(states):
+    width = len(states[0])
+    state_slices = floor(width / 12)
+    slices = []
+    states_arr = np.array(states)
+    for i in range(state_slices):
+        l = i * 12
+        r = l + 12
+        slices.append(states_arr[:, l:r])
+    s_compressed = np.concatenate(slices)
+    return s_compressed
+
+
+def get_states_from_file(
+    f_name, track_num=None, scale_num=None, scale_type="maj", k_radius=1
+):
     mt = load(f_name)
 
     # convert to binary representation
     mt.binarize()
 
-    track = mt.get_merged_pianoroll()
+    # ensure that the vector is 0,1 only
+    track = mt.get_merged_pianoroll(mode="any").astype(int)
+
     if track_num:
         track = mt.tracks[track_num]
 
@@ -134,35 +153,49 @@ def get_states_from_file(f_name, track_num=None, scale_num=None, scale_type="maj
                 states.append(s_compressed)
             else:
                 states.append(s)
-    print("States generated")
-    print_states(states[0:100])
+    states = squash_piano_roll_to_chromatic_frames(states)
+    print_states(states[0:5])
     # return
     # mets = metrics(states)
     print("States read from file: ", f_name)
     # print(mets, learn_rules_from_states)
 
-    rule = learn_rules_from_states(states, 5)
+    rule = learn_rules_from_states(states, k_radius)
     print(rule)
-    write_rule_to_json(rule, f_name.replace(".", "_"))
+    write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
-    seeds = [states[0:100][3], states[0:100][20], states[0:100][40]]
-    if sc_num != None:
-        maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
-            0 : (len(states[0]))
-        ]
-        seeds.append(maj_triad)
+    # Option 1. ECA rule seeds
+    width = 128
+    # width = len(states[0])
+    # seed is initial state
+    seed = np.zeros((width,), dtype=int)
+    seed[floor(width / 2)] = 1  # add 1 to middle
+
+    # Option 0. Random seed
+    # seed = np.random.rand(width).round()
+    print("seed:", seed)
+    # Option 1. Start from a single 1 value, ala ECA
+    seeds = [seed]
+
+    ## Option 2. Sample states from original
+    # seeds = [states[0:100][3], states[0:100][20], states[0:100][40]]
+    # if sc_num != None:
+    #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
+    #         0 : (len(states[0]))
+    #     ]
+    #     seeds.append(maj_triad)
 
     i = 0
     for seed in seeds:
         states = generate_states_from_learned_rule(96, np.array(seed), rule)
-        print_states(states)
+        # print_states(states)
         mets = metrics(states)
         # print(mets)
         f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
         if sc_num != None:
-            g = lambda x, y, z: generate_pianoroll(x, y, z, scale)
+            g = lambda x, y, z: generate_pianoroll(x, y, z, scale[0:width])
         else:
-            g = lambda x, y, z: generate_pianoroll_chromatic(x, y, z)
+            g = lambda x, y, z: generate_pianoroll_chromatic(x, y, z, width)
         write_files_from_states(states, mets, seed, [], f_name_out, g=g)
         i += 1
 
@@ -519,6 +552,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--kernelRadius",
+    metavar="R",
+    type=int,
+    default=1,
+    help="The radius of the kernel around the cell.",
+)
+
+parser.add_argument(
     "--track",
     metavar="T",
     type=int,
@@ -550,7 +591,13 @@ if args.mode == MODES[3]:
     exit(0)
 
 if args.load:
-    get_states_from_file(args.load, args.track, args.scaleNum, args.scaleType)
+    get_states_from_file(
+        args.load,
+        track_num=args.track,
+        scale_num=args.scaleNum,
+        scale_type=args.scaleType,
+        k_radius=args.kernelRadius,
+    )
     exit(0)
 
 # Mutually exclusive modes

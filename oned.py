@@ -88,12 +88,10 @@ def learn_rules_from_states(states, kernel_radius=1):
         x_plus_1 = states[i + 1]
         # Apply kernel to x
         x_pattern = convolve(x, k, mode="constant")
-        # print(x_pattern)
         # compare patterns to next state value
         for j in range(len(x)):
             x_patt_i = x_pattern[j]  # pattern encoding
             x_plus_1_i = x_plus_1[j]  # next transition
-            # print("x_patt_i: ", x_patt_i)
             # return
             if x_patt_i in counts_dict:
                 counts_dict[x_patt_i][x_plus_1_i] = (
@@ -130,20 +128,34 @@ def state_from_rule(x, learned_rule):
     """
     """
     k = learned_rule["k"]
+    # print("K", k)
     rule = learned_rule["rule"]
-    x_next = convolve(x, k, mode="constant")
+    x_next = convolve(x, k, mode="wrap")
+    # print("x_next: ", x, "->", x_next)
     result = np.zeros(x.shape)
     for i in range(len(result)):
         n = x_next[i]
-        if n in rule:
-            ## Option 1. Random:
+        # n_s = str(n).split(".")[0]
+        n_s = int(n)
+        # TEST: generate purely random state
+        # if np.random.rand() > 0.5:
+        #     result[i] = 1
+        # continue
+        if n_s in rule:
+            print("n: ", n, n_s, rule[n_s])
+            # ## Option 1. Random:
             random_value = np.random.rand()
-            # check against rule prob
-            if random_value < rule[n]:
+            # ## Option 2. Deterministic
+            # random_value = 0.5
+            # # check against rule prob
+            prob = rule[n_s]
+            if random_value <= prob:
                 result[i] = 1
             # not necessary, but being explicit
             else:
                 result[i] = 0
+        else:
+            print("n: ", n, n_s, None)
     return result
 
 
@@ -208,7 +220,7 @@ def metrics(results_arr):
 
 # # Normalize
 def f(x, k):
-    x_next = convolve(x, k, mode="reflect")
+    x_next = convolve(x, k, mode="wrap")
     x_norm = np.linalg.norm(x_next)
     if x_norm == 0:
         return x
@@ -216,7 +228,7 @@ def f(x, k):
 
 
 def gol(x, k):
-    x_next = convolve(x, k, mode="constant")
+    x_next = convolve(x, k, mode="wrap")
     # Activation Function 1: - binary
     # res = np.array(x_next * (x_next > 0) > 0, dtype=int)
 
@@ -265,7 +277,7 @@ def wolfram(x, k, a, k_states=None):
     a: activation
     k_states: kernel combination space
     """
-    x_next = convolve(x, k, mode="constant")
+    x_next = convolve(x, k, mode="constant", cval=0.0)
 
     states_arr = k_states[a]
     matches = np.isin(x_next, states_arr)
