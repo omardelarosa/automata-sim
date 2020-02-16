@@ -3,6 +3,7 @@ from scipy.ndimage import convolve
 from scipy.stats import entropy
 from math import floor, ceil, sqrt, log
 from automata import Automata, AutomataOptions
+from bitarray import bitarray
 
 # For generating primes
 import sympy
@@ -157,6 +158,17 @@ def state_from_rule(x, learned_rule):
         else:
             print("n: ", n, n_s, None)
     return result
+
+
+def int_to_activation_set(n, search_space_size=2 ** 32):
+    """
+    Decodes activation binary set from integer
+    """
+    width = int(log(search_space_size, 2))
+    bitstring = np.binary_repr(n, width=width)
+    bitarr = bitarray(bitstring)
+    a = np.array(bitarr.tolist(), dtype=np.uint8)
+    return a
 
 
 def uint8_tuple_to_bin_arr(t):

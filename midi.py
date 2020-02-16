@@ -14,6 +14,7 @@ from oned import (
     print_states,
     uint8_tuple_to_bin_arr,
     bin_arr_to_s,
+    int_to_activation_set,
 )
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
@@ -280,7 +281,7 @@ def write_files_from_eca(
 
     stats = {
         "metrics": metrics,
-        "activation": list(activation),
+        "activation": activation,
         "kernel": list(kernel),
     }
 
@@ -306,9 +307,8 @@ def plot_track(pianoroll, title="my awesome piano"):
 
 
 def generate_all_wolfram_eca(f_dir):
-
     neighborhood_radius = 2  # ECA is 1, anything greater is ???
-    max_search_space_size = 512
+    max_search_space_size = 5000
 
     # kernel is 3 consequtive primes
     k = tens(neighborhood_radius * 2 + 1)
@@ -337,55 +337,48 @@ def generate_all_wolfram_eca(f_dir):
 
     actual_search_space_size = min(activations_search_space_size, max_search_space_size)
     print("actual_search_space_size (with limit applied): ", actual_search_space_size)
-    activations = []
-    for n in range(0, actual_search_space_size):
-        # decompose large numbers into large binary-encodable numbers
-        l = [0] * int(log(activations_search_space_size, 256))
-        ns = int(n / 256)
-        for i in range(ns):
-            l[-(i + 1)] = 255
-        rem = n % 256
-        l[-(ns + 1)] = rem
-        t = tuple(l)
-        a = uint8_tuple_to_bin_arr(t)
-        activations.append(a)
-
-    print("activations_size: ", len(activations))
-    # print("activations: ", activations[0:10])
     # Steps to draw sequence
     steps = 96  # note this is not square
     activations_states_mets = []
+
+    # skip states that do not meet filtering condition
+    filtering_condition = lambda m, s: (
+        m["entropy_score"] < 1.05 and m["num_states"] > 60
+    )
+    # filtering_condition = lambda m, s: True # no-op filtering
+
     # Iterate over all rules
-    for a in activations:
+    for n in range(0, actual_search_space_size):
+        # generate activation
+        a = int_to_activation_set(n, activations_search_space_size)
+        # apply activation
         r_set = np.array(k_states)[a.astype(bool)]
         # NOTE: a, k must be np.arrays
         r = lambda x, k: wolfram(x, k, r_set)
         states = run(steps, seed=seed, kernel=k, f=r)
         mets = metrics(states)
         # TODO: expand this for more than 8bits
-        n = np.packbits(a)
-        activations_states_mets.append((a, states, mets))
+        # n = np.packbits(a)
+        if filtering_condition(mets, states):
+            print("activation rule found: ", n, a)
+            activations_states_mets.append((n, a, states, mets))
+
     # do something with results
-    leading_zeroes = int(log(len(activations_states_mets), 3)) + 1
+    leading_zeroes = int(log(activations_search_space_size, 10)) + 1
     ts = int(time.time())
     f_dir = "{}/t_{}_".format(f_dir, ts)
     i = 0
     pianorolls = []
-    for n, states, mets in activations_states_mets:
+    for n, a, states, mets in activations_states_mets:
         # stringify bits
-        a = ",".join(list(map(str, list(n))))
-        filename = "_rule_{}".format(fmt_idx(i, leading_zeroes),)  # activation idx
+        filename = "_rule_{}".format(fmt_idx(n, leading_zeroes),)  # activation idx
         f_name = f_dir + filename
-        # states = run(steps, seed, k, f=f)
-        # run_metrics = metrics(states)
-        write_files_from_eca(states, mets, k, a, f_name, title=f_name)
+        write_files_from_eca(states, mets, k, n, f_name, title=f_name)
 
         # TODO: make it possible to alter parameters more easily
         scale = C_maj_scale_ext
         pianoroll = generate_pianoroll(states, scale=scale)
-        pianorolls.append((pianoroll, "rule_{}".format(i)))
-
-        i += 1
+        pianorolls.append((pianoroll, "rule_{}".format(n)))
 
     tracks = []
     for pianoroll, title in pianorolls:
