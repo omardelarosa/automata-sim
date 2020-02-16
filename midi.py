@@ -12,6 +12,8 @@ from oned import (
     tens,
     generate_states_from_learned_rule,
     print_states,
+    uint8_tuple_to_bin_arr,
+    bin_arr_to_s,
 )
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
@@ -269,8 +271,8 @@ def write_files_from_eca(
     mt = Multitrack(tracks=[track])
 
     mid_file = "{f_name}_.{ext}".format(f_name=f_name, ext="mid")
-    json_file = "{f_name}_.{ext}".format(f_name=f_name, ext="json")
-
+    json_file = "{f_name}_metrics_.{ext}".format(f_name=f_name, ext="json")
+    json_states_file = "{f_name}_states_.{ext}".format(f_name=f_name, ext="json")
     # Write MIDI file
     mt.write(mid_file)
 
@@ -278,16 +280,20 @@ def write_files_from_eca(
 
     stats = {
         "metrics": metrics,
-        "states": [s.astype(np.float32).tolist() for s in states],
         "activation": list(activation),
         "kernel": list(kernel),
     }
+
+    states = {"states": [s.astype(np.float32).tolist() for s in states]}
     # print("Stats:", stats)
 
     print("Writing results: {}".format(json_file))
     # Save state info as json_file
     with open(json_file, "w") as json_file:
         json.dump(stats, json_file)
+
+    with open(json_states_file, "w") as json_states_file:
+        json.dump(states, json_states_file)
 
 
 def plot_track(pianoroll, title="my awesome piano"):
@@ -301,44 +307,64 @@ def plot_track(pianoroll, title="my awesome piano"):
 
 def generate_all_wolfram_eca(f_dir):
 
+    neighborhood_radius = 2  # ECA is 1, anything greater is ???
+    max_search_space_size = 512
+
     # kernel is 3 consequtive primes
-    k = tens(3)
+    k = tens(neighborhood_radius * 2 + 1)
 
-    # k_states is all the combinations of products of k
-    k_states = np.array(generate_combined_products(k) + [0])
+    num_bits_kernel = 2 ** (len(k))
+    print("k_size: ", num_bits_kernel)
 
+    k_states = [uint8_tuple_to_bin_arr((i,)) for i in range(0, num_bits_kernel)]
+    k_states_trimmed = list(
+        map(lambda x: x[-int(log(num_bits_kernel, 2)) :], [x for x in k_states])
+    )
+    k_states_trimmed.reverse()  # sort by sums
+    print("k_space_size: ", len(k_states))
+
+    k_states = list(map(lambda x: np.dot(k, x), k_states_trimmed))
+    # the maximum length of the rule, aka 2^(len(k))
+    activations_search_space_size = 2 ** num_bits_kernel
+
+    print("rule_space_size: ", activations_search_space_size)
+
+    # Width of state to test
     width = 32
     # seed is initial state
     seed = np.zeros((width,), dtype=int)
     seed[floor(width / 2)] = 1  # add 1 to middle
 
-    # generate cartesian product of all bit flags
-    bits = [False, True]
+    actual_search_space_size = min(activations_search_space_size, max_search_space_size)
+    print("actual_search_space_size (with limit applied): ", actual_search_space_size)
+    activations = []
+    for n in range(0, actual_search_space_size):
+        # decompose large numbers into large binary-encodable numbers
+        l = [0] * int(log(activations_search_space_size, 256))
+        ns = int(n / 256)
+        for i in range(ns):
+            l[-(i + 1)] = 255
+        rem = n % 256
+        l[-(ns + 1)] = rem
+        t = tuple(l)
+        a = uint8_tuple_to_bin_arr(t)
+        activations.append(a)
 
-    # the maximum length of the rule, aka 2^(len(k))
-    rule_size = 8
-
-    activations_arr = list(product(bits, repeat=rule_size))
-
-    # convert to numpy
-    activations = [np.array(a) for a in activations_arr]
-
-    # print(activations)
-
+    print("activations_size: ", len(activations))
+    # print("activations: ", activations[0:10])
+    # Steps to draw sequence
     steps = 96  # note this is not square
-
-    # a = np.array([True, False, False, False, True, True, True, False])
-
     activations_states_mets = []
     # Iterate over all rules
     for a in activations:
-        r = lambda x, k: wolfram(x, k, a, k_states)
+        r_set = np.array(k_states)[a.astype(bool)]
+        # NOTE: a, k must be np.arrays
+        r = lambda x, k: wolfram(x, k, r_set)
         states = run(steps, seed=seed, kernel=k, f=r)
         mets = metrics(states)
         # TODO: expand this for more than 8bits
         n = np.packbits(a)
-        activations_states_mets.append((n, states, mets))
-
+        activations_states_mets.append((a, states, mets))
     # do something with results
     leading_zeroes = int(log(len(activations_states_mets), 3)) + 1
     ts = int(time.time())
@@ -348,19 +374,18 @@ def generate_all_wolfram_eca(f_dir):
     for n, states, mets in activations_states_mets:
         # stringify bits
         a = ",".join(list(map(str, list(n))))
-        filename = "_i{}_a{}".format(
-            fmt_idx(i, leading_zeroes),  # seed idx
-            fmt_idx(a, leading_zeroes),  # kernel idx
-        )
+        filename = "_rule_{}".format(fmt_idx(i, leading_zeroes),)  # activation idx
         f_name = f_dir + filename
         # states = run(steps, seed, k, f=f)
         # run_metrics = metrics(states)
         write_files_from_eca(states, mets, k, a, f_name, title=f_name)
-        i += 1
 
         # TODO: make it possible to alter parameters more easily
-        pianoroll = generate_pianoroll(states, scale=C_maj_scale_ext)
-        pianorolls.append((pianoroll, "{}_{}".format(i, a)))
+        scale = C_maj_scale_ext
+        pianoroll = generate_pianoroll(states, scale=scale)
+        pianorolls.append((pianoroll, "rule_{}".format(i)))
+
+        i += 1
 
     tracks = []
     for pianoroll, title in pianorolls:

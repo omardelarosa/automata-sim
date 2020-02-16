@@ -159,6 +159,20 @@ def state_from_rule(x, learned_rule):
     return result
 
 
+def uint8_tuple_to_bin_arr(t):
+    """
+    Convert a uint8 tuple into an array of booleans.
+    """
+    return np.unpackbits(np.array(t, dtype=np.uint8))
+
+
+def bin_arr_to_s(b):
+    """
+    Convert binary arr to string of 1,0
+    """
+    return "".join(map(str, b.tolist()))
+
+
 def encode_state(s):
     """
     Encode as a tuple
@@ -271,16 +285,14 @@ def rule_30():
     #     print(" & ".join(map(str, s.tolist())) + "\\")
 
 
-def wolfram(x, k, a, k_states=None):
+def wolfram(x, k, r_set):
     """
     k: kernel operator
     a: activation
     k_states: kernel combination space
     """
     x_next = convolve(x, k, mode="constant", cval=0.0)
-
-    states_arr = k_states[a]
-    matches = np.isin(x_next, states_arr)
+    matches = np.isin(x_next, r_set)
     result = np.where(matches, 1, 0)
     return result
 
@@ -288,11 +300,11 @@ def wolfram(x, k, a, k_states=None):
 def run(steps, seed=seed, kernel=kernel, f=f):
     results = [seed]
     a_b = np.copy(seed)
-    print("{}: {}".format(0, seed))
+    # print("{}: {}".format(0, seed))
     for i in range(steps):
         a_b = f(a_b, kernel)
         r = a_b.copy()
-        print("{}: {}".format(i + 1, r))
+        # print("{}: {}".format(i + 1, r))
         results.append(r)
     return results
 

@@ -20,7 +20,9 @@ def aggregate_summary(f_name_prefix):
     ]
     for f in files:
         f_name = f.replace(f_name_prefix, "")
-        _, seed_key, kernel_key, _ = f_name.split("_")
+        f_parts = f_name.split("_")
+        seed_key = f_parts[1]
+        kernel_key = f_parts[2]
         if seed_key not in seeds_kernels:
             seeds_kernels[seed_key] = {}
         seed = seeds_kernels[seed_key]
@@ -28,9 +30,10 @@ def aggregate_summary(f_name_prefix):
         with open(f, "r") as f_json:
             data_dict = json.load(f_json)
             data = {}
-            data["kernel"] = data_dict["kernel"]
-            for k in keys:
-                data[k] = data_dict["metrics"][k]
+            if "kernel" in data_dict:
+                data["kernel"] = data_dict["kernel"]
+                for k in keys:
+                    data[k] = data_dict["metrics"][k]
             seed[kernel_key] = {"file_name": f_name, "data": data}
         # print("file: ", seed_key, kernel_key)
 
