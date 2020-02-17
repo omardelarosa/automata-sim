@@ -16,6 +16,7 @@ sympy = "*"
 black = "*"
 bitarray = "*"
 scikit-learn = "*"
+pillow = "*"
 
 [requires]
 python_version = "3.7"

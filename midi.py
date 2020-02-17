@@ -18,6 +18,8 @@ from oned import (
     uint8_tuple_to_bin_arr,
     bin_arr_to_s,
     int_to_activation_set,
+    image_from_states,
+    print_markdown_table
 )
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
@@ -123,7 +125,7 @@ def squash_piano_roll_to_chromatic_frames(states):
 
 
 def generate_states_from_rule_and_seed(
-    f_name=None, rule=None, seed=None, scale_num=None, scale_type="maj"
+    f_name=None, rule=None, seed=None, scale_num=None, scale_type="maj", states=[]
 ):
     sc_num = scale_num
     sc_type = scale_type
@@ -141,39 +143,50 @@ def generate_states_from_rule_and_seed(
         width = 128
     # width = len(states[0])
     # seed is initial state
-    seed = np.zeros((width,), dtype=int)
-    seed[floor(width / 2)] = 1  # add 1 to middle
+    if seed != None:
+        seeds = [seed]
+    else:
+        seed = np.zeros((width,), dtype=int)
+        seed[floor(width / 2)] = 1  # add 1 to middle
 
-    # Option 0. Random seed
-    # seed = np.random.rand(width).round()
-    print("seed:", seed)
-    # Option 1. Start from a single 1 value, ala ECA
-    seeds = [seed]
+        # Option 0. Random seed
+        # seed = np.random.rand(width).round()
 
-    # Option 2. Start from a random given state
-    random_state_idx = int(np.random.uniform(0, len(states)))
+        # Option 1. Start from a single 1 value, ala ECA
+        seeds = [seed]
 
-    rand_state = states[random_state_idx]
-    rand_state_tiled = np.tile(rand_state, 128)[0:width]
-    ## Option 3. Sample states from original
-    # seeds = [rand_state_tiled]
-    # if sc_num != None:
-    #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
-    #         0 : (len(states[0]))
-    #     ]
-    #     seeds.append(maj_triad)
+        # Option 2. Start from a random given state
+        random_state_idx = int(np.random.uniform(0, len(states)))
 
-    steps = 96
+        rand_state = states[random_state_idx]
+        rand_state_tiled = np.tile(rand_state, 128)[0:width]
+        ## Option 3. Sample states from original
+        #seeds = [rand_state_tiled]
+        # if sc_num != None:
+        #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
+        #         0 : (len(states[0]))
+        #     ]
+        #     seeds.append(maj_triad)
+
     i = 0
+
     for seed in seeds:
+        print("seed:", seed)
         k = rule["k"]
         a = np.array(rule["rule"])
+
+        # THIS IS SUPER IMPORTANT TO GETTING GOOD RESULTS
+        # Flip final bit
+        a[-1] = 0
+
         k_states = np.array(list(map(np.int64, rule["k_states"])))
         # generate rule from k_states / mask
         r_set = k_states[a.astype(bool)]
+        print("r_set", r_set)
         r = lambda x, k: wolfram(x, k, r_set)
         states = run(steps, seed=seed, kernel=k, f=r)
-
+        f_name_img = f_name.replace(".", "_") + ".png"
+        image_from_states(states, f_name_img)
         print_states(states[0:10])
         mets = metrics(states)
         f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
@@ -227,7 +240,17 @@ def learn_rule_from_file(
     if not skip_write:
         write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
-    return rule
+    # TODO: remove from this function later
+    generate_states_from_rule_and_seed(
+        f_name=f_name,
+        seed=None,
+        rule=rule,
+        scale_num=sc_num,
+        scale_type=sc_type,
+        states=states
+    )
+
+    return rule, states
 
 
 def write_rule_to_json(rule, f_name):
@@ -504,22 +527,64 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
 def test_eca_learning(f_dir, k_radius=1):
     files = glob(f_dir)
     results = []
+    image_names = {}
     for f in files:
-        rule = learn_rule_from_file(f, k_radius=k_radius, skip_write=True)
+        rule, states = learn_rule_from_file(f, k_radius=k_radius, skip_write=True)
         f_parts = f.split("_")
+        f_pic_name = f.replace(".", "_") + ".png"
+        im = image_from_states(states, f_pic_name)
+        # return
         rule_num = int(f_parts[6])  # NOTE: idx subject to change on file renaming
         # print(f_parts)
         # rule_num = f_parts
         ba = bitarray(rule["rule"])
         ba_int = ba2int(ba)
+        image_names[rule_num] = f_pic_name
         print("rule:", rule_num, ba_int)
-        results.append((rule_num, ba_int, rule_num == ba_int))
+        results.append(
+            (
+                rule_num,
+                ba_int,
+                rule_num == ba_int
+            )
+        )
     print("len: ", len(files))
 
     mismatches = 0
     for expected, actual, matched in results:
         if not matched:
             mismatches += 1
+
+    results.sort(key=lambda x: x[0])
+
+    # Print markdown table
+    labels = [
+       "Rule",
+       "Image",
+        "Classified As",
+        "Image",
+        "Matched"
+    ]
+
+    rows = []
+
+    for result in results:
+        r1, r2, m = result
+        im1 = image_names[r1]
+        if r2 in image_names:
+            im2 = image_names[r2]
+        else:
+            im2 = 'NOT-FOUND'
+        row = [
+            r1,
+            "![Rule {}]({})".format(r1, image_names[r1]),
+            r2,
+            "![Rule {}]({})".format(r2, im2),
+            m
+        ]
+        rows.append(row)
+
+    print_markdown_table(labels, rows)
 
     successful_matches = len(results) - mismatches
     print("successful_matches: ", successful_matches)

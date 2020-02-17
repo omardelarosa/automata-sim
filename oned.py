@@ -4,6 +4,7 @@ from scipy.stats import entropy
 from math import floor, ceil, sqrt, log
 from automata import Automata, AutomataOptions
 from bitarray import bitarray
+from PIL import Image
 
 # For generating primes
 import sympy
@@ -126,6 +127,7 @@ def learn_rules_from_states(states, kernel_radius=1, debug=False):
 
     # create a dictionary of likelihood value will be 1
     rule = {}
+    targets = {}
     state_size = len(states[0])
     population = np.sum(np.array(states))  # i.e. number of alive cells
     occurences = n * len(states[0])
@@ -133,20 +135,30 @@ def learn_rules_from_states(states, kernel_radius=1, debug=False):
         print(counts_dict)
 
     # the minimum probability to mark rule
-    prob_floor = 0.000
+    prob_floor = 0.0000
     for n in counts_dict:
         v = counts_dict[n]
         # rule[n] = np.float64(v[1]) / np.sum(v, dtype=np.float64)
-        prob = np.float64(v[1]) / population
+        prob_1 = np.float64(v[1]) / population
+        prob_0 = np.float64(v[0]) / (occurences - population)
+        target = 0
+        if prob_1 > prob_0:
+            prob = prob_1
+            target = 1
+        else:
+            prob = prob_0
+            target = 0
+        # assign the prob
         if prob > prob_floor:
             rule[n] = prob
-
+            targets[n] = target
     # Match with rule in rulespace
     a = []
     for ks in k_states:
         rule_str = str(ks)
         if rule_str in rule:
-            a.append(1)
+            t = targets[rule_str]
+            a.append(t)
         else:
             a.append(0)
     if debug:
@@ -384,6 +396,33 @@ def run(steps, seed=seed, kernel=kernel, f=f):
 def print_states(states):
     for i in range(len(states)):
         print("{}: {}".format(i, states[i]))
+
+
+def image_from_states(states, f_name, max_height=64):
+    mat = np.array(np.uint8(np.logical_not(states[0:max_height])) * 255)
+    # for s in mat:
+    #     print(s)
+    # print("mat:", mat)
+    im = Image.fromarray(mat, mode="L")
+    print("Saving image: ", f_name)
+    im.save(f_name)
+    return im
+
+
+def print_markdown_table(labels, rows):
+    # labels
+    print("| " + " | ".join(labels) + " |")
+
+    # divider
+    print("| " + " | ".join(list(map(lambda x: "----", labels))) + " |")
+    for row in rows:
+        # row
+        print("| " + " | ".join(list(map(str, row))) + " |")
+
+
+# TODO:
+def print_latex_table(labels, rows):
+    return
 
 
 # class OneD(Automata):
