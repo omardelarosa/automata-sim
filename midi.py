@@ -135,33 +135,7 @@ def get_states_from_file(
         print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
 
     if is_midi:
-        mt = load(f_name)
-
-        # convert to binary representation
-        mt.binarize()
-
-        # ensure that the vector is 0,1 only
-        track = mt.get_merged_pianoroll(mode="any").astype(int)
-
-        if track_num:
-            track = mt.tracks[track_num]
-
-        # NOTE: these are the dimensions
-        # rows = timestep, cols = keyboard
-        # print(track.shape)
-        states = []
-        for s in track:
-            # Skip rests by only taking tracks with non-zero sums
-            sum_s = np.sum(s)
-            if sum_s > 0:
-                # compress to scale
-                if sc_num != None:
-                    s_compressed = squash_state_to_scale(s, scale_mask)
-                    states.append(s_compressed)
-                else:
-                    states.append(s)
-        states = squash_piano_roll_to_chromatic_frames(states)
-
+        states = convert_midi_to_state(f_name, scale_num, scale_type)
     elif is_json:
         # handle json
         with open(f_name, "r") as json_file:
@@ -178,11 +152,14 @@ def get_states_from_file(
 
     rule = learn_rules_from_states(states, k_radius)
     print(rule)
-    return
+    # return
     write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
     # Option 1. ECA rule seeds
-    width = 128
+    if scale_num != None:
+        width = 75
+    else:
+        width = 128
     # width = len(states[0])
     # seed is initial state
     seed = np.zeros((width,), dtype=int)
@@ -194,8 +171,13 @@ def get_states_from_file(
     # Option 1. Start from a single 1 value, ala ECA
     seeds = [seed]
 
-    ## Option 2. Sample states from original
-    # seeds = [states[0:100][3], states[0:100][20], states[0:100][40]]
+    # Option 2. Start from a random given state
+    random_state_idx = int(np.random.uniform(0, len(states)))
+
+    rand_state = states[random_state_idx]
+    rand_state_tiled = np.tile(rand_state, 128)[0:width]
+    ## Option 3. Sample states from original
+    seeds = [rand_state_tiled]
     # if sc_num != None:
     #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
     #         0 : (len(states[0]))
@@ -205,7 +187,7 @@ def get_states_from_file(
     i = 0
     for seed in seeds:
         states = generate_states_from_learned_rule(96, np.array(seed), rule)
-        # print_states(states)
+        print_states(states[0:10])
         mets = metrics(states)
         # print(mets)
         f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
@@ -220,7 +202,8 @@ def get_states_from_file(
 def write_rule_to_json(rule, f_name):
     json_file = "{f_name}_.{ext}".format(f_name=f_name, ext="json")
     d = {}
-    d["k"] = list(map(str, rule["k"]))
+    d["k"] = rule["k"]
+    d["k_states"] = list(map(str, rule["k_states"]))
     d["rule"] = {}
     for key in rule["rule"]:
         d["rule"][str(key)] = rule["rule"][key]
@@ -318,6 +301,71 @@ def plot_track(pianoroll, title="my awesome piano"):
     # Plot the pianoroll
     fig, ax = track.plot()
     plt.show()
+
+
+def convert_midi_to_state(f_name, scale_num=None, scale_type="maj"):
+    is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
+
+    sc_num = scale_num
+    sc_type = scale_type
+
+    if scale_num != None:
+        scale_mask = get_full_scale(sc_num)
+        n = np.array(range(0, 128))
+        scale = n[scale_mask]
+        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+
+    if is_midi:
+        mt = load(f_name)
+
+        # convert to binary representation
+        mt.binarize()
+
+        # ensure that the vector is 0,1 only
+        track = mt.get_merged_pianoroll(mode="any").astype(int)
+
+        # NOTE: these are the dimensions
+        # rows = timestep, cols = keyboard
+        # print(track.shape)
+        states = []
+        for s in track:
+            # compress to scale
+            if sc_num != None:
+                s_compressed = squash_state_to_scale(s, scale_mask)
+                states.append(s_compressed)
+            else:
+                states.append(s)
+        states = squash_piano_roll_to_chromatic_frames(states)
+        if sc_num != None:
+            # Squash to scale
+            states = [squash_state_to_scale(s, scale_mask[0:12]) for s in states]
+        states = list(filter(lambda x: np.sum(x) > 0, states))
+        deduped_states = []
+        for i, state in enumerate(states):
+            if i == 0:
+                deduped_states.append(state)
+            else:
+                # filter out silence
+                s = np.sum(state)
+                if s > 0 and not np.all(np.equal(state, states[i - 1])):
+                    deduped_states.append(state)
+        states = deduped_states
+    else:
+        print("Not midi file!")
+        exit(1)
+
+    json_states_file = "{f_name}_states_.{ext}".format(
+        f_name=f_name.replace(".", "_"), ext="json"
+    )
+
+    states_dict = {"states": [s.astype(int).tolist() for s in states]}
+
+    with open(json_states_file, "w") as json_file:
+        json.dump(states_dict, json_file)
+
+    print("Wrote file: ", json_states_file)
+
+    return states
 
 
 def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
@@ -585,6 +633,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--convert",
+    metavar="C",
+    type=str,
+    default=None,
+    help="Convert midi file to states file.",
+)
+
+parser.add_argument(
     "--kernelRadius",
     metavar="R",
     type=int,
@@ -621,6 +677,10 @@ if args.outdir:
 
 if args.mode == MODES[3]:
     generate_all_wolfram_eca(f_dir, args.kernelRadius)
+    exit(0)
+
+if args.convert:
+    convert_midi_to_state(args.convert, args.scaleNum, args.scaleType)
     exit(0)
 
 if args.load:

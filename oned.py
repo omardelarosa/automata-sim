@@ -125,12 +125,18 @@ def learn_rules_from_states(states, kernel_radius=1):
     # create a dictionary of likelihood value will be 1
     rule = {}
     state_size = len(states[0])
-    occurences = n * state_size
+    population = np.sum(np.array(states))  # i.e. number of alive cells
+    occurences = n * len(states[0])
     print(counts_dict)
+
+    # the minimum probability to mark rule
+    prob_floor = 0.001
     for n in counts_dict:
         v = counts_dict[n]
         # rule[n] = np.float64(v[1]) / np.sum(v, dtype=np.float64)
-        rule[n] = np.float64(v[1]) / occurences
+        prob = np.float64(v[1]) / population
+        if prob > prob_floor:
+            rule[n] = prob
 
     return {"k": k, "rule": rule, "k_states": k_states}
 
@@ -150,21 +156,29 @@ def state_from_rule(x, learned_rule):
     """
     """
     k = learned_rule["k"]
+    activations_search_space_size = 2 ** (2 ** len(k))
     # print("K", k)
     rule = learned_rule["rule"]
+    # print("rule:", rule)
     x_next = convolve(x, k, mode="wrap")
     # print("x_next: ", x, "->", x_next)
     result = np.zeros(x.shape)
     for i in range(len(result)):
         n = x_next[i]
+        if n == 0:
+            continue
         # n_s = str(n).split(".")[0]
-        n_s = int(n)
+        n_s = int_to_activation_set_hash(int(n), activations_search_space_size)
+        # if n > 0:
+        #     print("n: ", n, n_s)
         # TEST: generate purely random state
         # if np.random.rand() > 0.5:
         #     result[i] = 1
         # continue
+        # print("n_s", n_s)
         if n_s in rule:
-            print("n: ", n, n_s, rule[n_s])
+            result[i] = 1
+            #     # print("n: ", n, n_s, rule[n_s])
             # ## Option 1. Random:
             random_value = np.random.rand()
             # ## Option 2. Deterministic
@@ -176,8 +190,8 @@ def state_from_rule(x, learned_rule):
             # not necessary, but being explicit
             else:
                 result[i] = 0
-        else:
-            print("n: ", n, n_s, None)
+        # # else:
+        # #     print("n: ", n, n_s, None)
     return result
 
 
