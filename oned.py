@@ -106,18 +106,18 @@ def learn_rules_from_states(states, kernel_radius=1):
         # compare patterns to next state value
         for j in range(len(x)):
             x_patt_i = x_pattern[j]  # pattern encoding
-            rule_str = int_to_activation_set_hash(
-                int(x_patt_i), activations_search_space_size
-            )
-            x_plus_1_i = int(x_plus_1[j])  # next transition
+            # print("x_patt_i", x_patt_i)
+            rule_str = str(int(x_patt_i))
+            x_plus_1_j = int(x_plus_1[j])  # next transition
+            # print("r({}) {} -> {}: ".format(rule_str, x_patt_i, x_plus_1_j))
             # return
             if rule_str in counts_dict:
-                counts_dict[rule_str][x_plus_1_i] = (
-                    counts_dict[rule_str][x_plus_1_i] + 1
+                counts_dict[rule_str][x_plus_1_j] = (
+                    counts_dict[rule_str][x_plus_1_j] + 1
                 )
             else:
                 counts = [0, 0]
-                counts[x_plus_1_i] = 1
+                counts[x_plus_1_j] = 1
                 counts_dict[rule_str] = counts
 
         # Find match for x-pattern
@@ -130,7 +130,7 @@ def learn_rules_from_states(states, kernel_radius=1):
     print(counts_dict)
 
     # the minimum probability to mark rule
-    prob_floor = 0.001
+    prob_floor = 0.000
     for n in counts_dict:
         v = counts_dict[n]
         # rule[n] = np.float64(v[1]) / np.sum(v, dtype=np.float64)
@@ -138,7 +138,16 @@ def learn_rules_from_states(states, kernel_radius=1):
         if prob > prob_floor:
             rule[n] = prob
 
-    return {"k": k, "rule": rule, "k_states": k_states}
+    # Match with rule in rulespace
+    a = []
+    for ks in k_states:
+        rule_str = str(ks)
+        if rule_str in rule:
+            a.append(1)
+        else:
+            a.append(0)
+    print("a:", a)
+    return {"k": k, "rule": a, "k_states": k_states, "confidence_scores": rule}
 
 
 def generate_states_from_learned_rule(steps, seed, rule):

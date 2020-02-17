@@ -119,7 +119,71 @@ def squash_piano_roll_to_chromatic_frames(states):
     return s_compressed
 
 
-def get_states_from_file(
+def generate_states_from_rule_and_seed(
+    f_name=None, rule=None, seed=None, scale_num=None, scale_type="maj"
+):
+    sc_num = scale_num
+    sc_type = scale_type
+
+    if scale_num != None:
+        scale_mask = get_full_scale(sc_num)
+        n = np.array(range(0, 128))
+        scale = n[scale_mask]
+        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+
+    # Option 1. ECA rule seeds
+    if scale_num != None:
+        width = 75
+    else:
+        width = 128
+    # width = len(states[0])
+    # seed is initial state
+    seed = np.zeros((width,), dtype=int)
+    seed[floor(width / 2)] = 1  # add 1 to middle
+
+    # Option 0. Random seed
+    # seed = np.random.rand(width).round()
+    print("seed:", seed)
+    # Option 1. Start from a single 1 value, ala ECA
+    seeds = [seed]
+
+    # Option 2. Start from a random given state
+    random_state_idx = int(np.random.uniform(0, len(states)))
+
+    rand_state = states[random_state_idx]
+    rand_state_tiled = np.tile(rand_state, 128)[0:width]
+    ## Option 3. Sample states from original
+    # seeds = [rand_state_tiled]
+    # if sc_num != None:
+    #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
+    #         0 : (len(states[0]))
+    #     ]
+    #     seeds.append(maj_triad)
+
+    steps = 96
+    i = 0
+    for seed in seeds:
+        k = rule["k"]
+        a = np.array(rule["rule"])
+        k_states = np.array(list(map(np.int64, rule["k_states"])))
+        # generate rule from k_states / mask
+        r_set = k_states[a.astype(bool)]
+        r = lambda x, k: wolfram(x, k, r_set)
+        states = run(steps, seed=seed, kernel=k, f=r)
+
+        print_states(states[0:10])
+        mets = metrics(states)
+        f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
+        if sc_num != None:
+            g = lambda x, y, z: generate_pianoroll(x, y, z, scale[0:width])
+        else:
+            g = lambda x, y, z: generate_pianoroll_chromatic(x, y, z, width)
+        write_files_from_states(states, mets, seed, [], f_name_out, g=g)
+        i += 1
+    return
+
+
+def learn_rule_from_file(
     f_name, track_num=None, scale_num=None, scale_type="maj", k_radius=1
 ):
     is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
@@ -151,52 +215,10 @@ def get_states_from_file(
     # print(mets, learn_rules_from_states)
 
     rule = learn_rules_from_states(states, k_radius)
-    print(rule)
-    # return
+
     write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
-    # Option 1. ECA rule seeds
-    if scale_num != None:
-        width = 75
-    else:
-        width = 128
-    # width = len(states[0])
-    # seed is initial state
-    seed = np.zeros((width,), dtype=int)
-    seed[floor(width / 2)] = 1  # add 1 to middle
-
-    # Option 0. Random seed
-    # seed = np.random.rand(width).round()
-    print("seed:", seed)
-    # Option 1. Start from a single 1 value, ala ECA
-    seeds = [seed]
-
-    # Option 2. Start from a random given state
-    random_state_idx = int(np.random.uniform(0, len(states)))
-
-    rand_state = states[random_state_idx]
-    rand_state_tiled = np.tile(rand_state, 128)[0:width]
-    ## Option 3. Sample states from original
-    seeds = [rand_state_tiled]
-    # if sc_num != None:
-    #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
-    #         0 : (len(states[0]))
-    #     ]
-    #     seeds.append(maj_triad)
-
-    i = 0
-    for seed in seeds:
-        states = generate_states_from_learned_rule(96, np.array(seed), rule)
-        print_states(states[0:10])
-        mets = metrics(states)
-        # print(mets)
-        f_name_out = f_name.replace(".", "_") + "_{}_".format(i)
-        if sc_num != None:
-            g = lambda x, y, z: generate_pianoroll(x, y, z, scale[0:width])
-        else:
-            g = lambda x, y, z: generate_pianoroll_chromatic(x, y, z, width)
-        write_files_from_states(states, mets, seed, [], f_name_out, g=g)
-        i += 1
+    return rule
 
 
 def write_rule_to_json(rule, f_name):
@@ -204,9 +226,8 @@ def write_rule_to_json(rule, f_name):
     d = {}
     d["k"] = rule["k"]
     d["k_states"] = list(map(str, rule["k_states"]))
-    d["rule"] = {}
-    for key in rule["rule"]:
-        d["rule"][str(key)] = rule["rule"][key]
+    d["rule"] = rule["rule"]
+    d["confidence_scores"] = rule["confidence_scores"]
     print(d)
     print("Writing Rule to: {}".format(json_file))
     # Save state info as json_file
@@ -633,6 +654,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--learn",
+    metavar="F",
+    type=str,
+    default=None,
+    help="Learn rule from a midi or json states file.",
+)
+
+parser.add_argument(
     "--convert",
     metavar="C",
     type=str,
@@ -683,9 +712,9 @@ if args.convert:
     convert_midi_to_state(args.convert, args.scaleNum, args.scaleType)
     exit(0)
 
-if args.load:
-    get_states_from_file(
-        args.load,
+if args.learn or args.load:
+    learn_rule_from_file(
+        args.load or args.learn,
         track_num=args.track,
         scale_num=args.scaleNum,
         scale_type=args.scaleType,
