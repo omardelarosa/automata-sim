@@ -72,9 +72,23 @@ def learn_rules_from_states(states, kernel_radius=1):
     k_len = (kernel_radius * 2) + 1
     # kernel = primes(k_len)
     k = tens(k_len)
-    # k = [1, 10, 100, 1000, 10000]
 
-    k_states = generate_combined_products(k) + [0]
+    num_bits_kernel = 2 ** (len(k))
+
+    k_states = [uint8_tuple_to_bin_arr((i,)) for i in range(0, num_bits_kernel)]
+    k_states_trimmed = list(
+        map(lambda x: x[-int(log(num_bits_kernel, 2)) :], [x for x in k_states])
+    )
+    k_states_trimmed.reverse()  # sort by sums
+    print("k_space_size: ", len(k_states))
+
+    k_states = list(map(lambda x: np.dot(k, x), k_states_trimmed))
+
+    # the maximum length of the rule, aka 2^(len(k))
+    activations_search_space_size = 2 ** num_bits_kernel
+
+    print("rule_space_size: ", activations_search_space_size)
+
     # print("k_states: ", k_states)
     # only track non-zero
     counts_dict = {}
@@ -92,26 +106,33 @@ def learn_rules_from_states(states, kernel_radius=1):
         # compare patterns to next state value
         for j in range(len(x)):
             x_patt_i = x_pattern[j]  # pattern encoding
-            x_plus_1_i = x_plus_1[j]  # next transition
+            rule_str = int_to_activation_set_hash(
+                int(x_patt_i), activations_search_space_size
+            )
+            x_plus_1_i = int(x_plus_1[j])  # next transition
             # return
-            if x_patt_i in counts_dict:
-                counts_dict[x_patt_i][x_plus_1_i] = (
-                    counts_dict[x_patt_i][x_plus_1_i] + 1
+            if rule_str in counts_dict:
+                counts_dict[rule_str][x_plus_1_i] = (
+                    counts_dict[rule_str][x_plus_1_i] + 1
                 )
             else:
                 counts = [0, 0]
                 counts[x_plus_1_i] = 1
-                counts_dict[x_patt_i] = counts
+                counts_dict[rule_str] = counts
 
         # Find match for x-pattern
 
     # create a dictionary of likelihood value will be 1
     rule = {}
+    state_size = len(states[0])
+    occurences = n * state_size
+    print(counts_dict)
     for n in counts_dict:
         v = counts_dict[n]
-        rule[n] = np.float64(v[1]) / np.sum(v, dtype=np.float64)
+        # rule[n] = np.float64(v[1]) / np.sum(v, dtype=np.float64)
+        rule[n] = np.float64(v[1]) / occurences
 
-    return {"k": k, "rule": rule}
+    return {"k": k, "rule": rule, "k_states": k_states}
 
 
 def generate_states_from_learned_rule(steps, seed, rule):
@@ -169,6 +190,18 @@ def int_to_activation_set(n, search_space_size=2 ** 32):
     bitarr = bitarray(bitstring)
     a = np.array(bitarr.tolist(), dtype=np.uint8)
     return a
+
+
+def int_to_activation_set_hash(n, search_space_size=2 ** 32):
+    """
+    Decodes activation binary set from integer
+    """
+    width = int(log(search_space_size, 2))
+    bitstring = np.binary_repr(n, width=width)
+    return bitstring
+    # bitarr = bitarray(bitstring)
+    # a = np.array(bitarr.tolist(), dtype=np.uint8)
+    # return a
 
 
 def uint8_tuple_to_bin_arr(t):

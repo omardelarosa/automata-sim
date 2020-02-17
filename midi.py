@@ -124,6 +124,16 @@ def get_states_from_file(
 ):
     is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
     is_json = f_name.endswith(".json")
+
+    sc_num = scale_num
+    sc_type = scale_type
+
+    if scale_num != None:
+        scale_mask = get_full_scale(sc_num)
+        n = np.array(range(0, 128))
+        scale = n[scale_mask]
+        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+
     if is_midi:
         mt = load(f_name)
 
@@ -135,15 +145,6 @@ def get_states_from_file(
 
         if track_num:
             track = mt.tracks[track_num]
-
-        sc_num = scale_num
-        sc_type = scale_type
-
-        if scale_num != None:
-            scale_mask = get_full_scale(sc_num)
-            n = np.array(range(0, 128))
-            scale = n[scale_mask]
-            print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
 
         # NOTE: these are the dimensions
         # rows = timestep, cols = keyboard
@@ -177,6 +178,7 @@ def get_states_from_file(
 
     rule = learn_rules_from_states(states, k_radius)
     print(rule)
+    return
     write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
     # Option 1. ECA rule seeds
@@ -318,8 +320,8 @@ def plot_track(pianoroll, title="my awesome piano"):
     plt.show()
 
 
-def generate_all_wolfram_eca(f_dir):
-    neighborhood_radius = 2  # ECA is 1, anything greater is ???
+def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
+    # ECA is 1, anything greater is ???
     max_search_space_size = 5000
 
     # kernel is 3 consequtive primes
@@ -350,7 +352,8 @@ def generate_all_wolfram_eca(f_dir):
     actual_search_space_size = min(activations_search_space_size, max_search_space_size)
     print("actual_search_space_size (with limit applied): ", actual_search_space_size)
     # Steps to draw sequence
-    steps = 96  # note this is not square
+    steps = 1000  # note this is not square
+    # steps = 96
     activations_states_mets = []
 
     # skip states that do not meet filtering condition
@@ -371,9 +374,9 @@ def generate_all_wolfram_eca(f_dir):
         mets = metrics(states)
         # TODO: expand this for more than 8bits
         # n = np.packbits(a)
-        if filtering_condition(mets, states):
-            print("activation rule found: ", n, a)
-            activations_states_mets.append((n, a, states, mets))
+        # if filtering_condition(mets, states):
+        #     print("activation rule found: ", n, a)
+        activations_states_mets.append((n, a, states, mets))
 
     # do something with results
     leading_zeroes = int(log(activations_search_space_size, 10)) + 1
@@ -617,7 +620,7 @@ if args.outdir:
     f_dir = args.outdir
 
 if args.mode == MODES[3]:
-    generate_all_wolfram_eca(f_dir)
+    generate_all_wolfram_eca(f_dir, args.kernelRadius)
     exit(0)
 
 if args.load:

@@ -59,8 +59,16 @@ python cli.py --neighborhood-size 3 3 --load-from=examples/gol01/gol_ca*.npy
 
 ### Generate all Elementary Cellular Automata
 
-This is how all of Wolfram's 256 elementary automata would be generated
+This is how all of Wolfram's 256 (aka 8bit) elementary automata would be generated
 
 ```
 python midi.py --mode=wolfram --outdir ./renderings/midi/wolfram_eca_8bit
 ```
+
+Higher dimensional values can be done as well (32bit)
+
+```
+python midi.py --mode=wolfram --outdir ./renderings/midi/wolfram_eca_32bit --kernelRadius=2
+```
+
+However, larger sizes are bounded by system integer sizes
