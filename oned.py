@@ -397,6 +397,10 @@ def print_states(states):
     for i in range(len(states)):
         print("{}: {}".format(i, states[i]))
 
+        # # LaTeX
+        # s = states[i]
+        # print(" & ".join(map(str, s.tolist())) + "\\")
+
 
 def image_from_states(states, f_name, max_height=64):
     mat = np.array(np.uint8(np.logical_not(states[0:max_height])) * 255)
