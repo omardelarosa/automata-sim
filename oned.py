@@ -67,7 +67,7 @@ def generate_combined_products(primes_list):
     return products
 
 
-def learn_rules_from_states(states, kernel_radius=1):
+def learn_rules_from_states(states, kernel_radius=1, debug=False):
     # generate a kernel based on radius
     k_len = (kernel_radius * 2) + 1
     # kernel = primes(k_len)
@@ -80,14 +80,16 @@ def learn_rules_from_states(states, kernel_radius=1):
         map(lambda x: x[-int(log(num_bits_kernel, 2)) :], [x for x in k_states])
     )
     k_states_trimmed.reverse()  # sort by sums
-    print("k_space_size: ", len(k_states))
+    if debug:
+        print("k_space_size: ", len(k_states))
 
     k_states = list(map(lambda x: np.dot(k, x), k_states_trimmed))
 
     # the maximum length of the rule, aka 2^(len(k))
     activations_search_space_size = 2 ** num_bits_kernel
 
-    print("rule_space_size: ", activations_search_space_size)
+    if debug:
+        print("rule_space_size: ", activations_search_space_size)
 
     # print("k_states: ", k_states)
     # only track non-zero
@@ -127,7 +129,8 @@ def learn_rules_from_states(states, kernel_radius=1):
     state_size = len(states[0])
     population = np.sum(np.array(states))  # i.e. number of alive cells
     occurences = n * len(states[0])
-    print(counts_dict)
+    if debug:
+        print(counts_dict)
 
     # the minimum probability to mark rule
     prob_floor = 0.000
@@ -146,7 +149,8 @@ def learn_rules_from_states(states, kernel_radius=1):
             a.append(1)
         else:
             a.append(0)
-    print("a:", a)
+    if debug:
+        print("a:", a)
     return {"k": k, "rule": a, "k_states": k_states, "confidence_scores": rule}
 
 

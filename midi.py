@@ -1,6 +1,9 @@
 import numpy as np
 from pypianoroll import Multitrack, Track, load
 from matplotlib import pyplot as plt
+from glob import glob
+from bitarray import bitarray
+from bitarray.util import ba2int
 from oned import (
     run,
     metrics,
@@ -184,7 +187,12 @@ def generate_states_from_rule_and_seed(
 
 
 def learn_rule_from_file(
-    f_name, track_num=None, scale_num=None, scale_type="maj", k_radius=1
+    f_name,
+    track_num=None,
+    scale_num=None,
+    scale_type="maj",
+    k_radius=1,
+    skip_write=False,
 ):
     is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
     is_json = f_name.endswith(".json")
@@ -216,7 +224,8 @@ def learn_rule_from_file(
 
     rule = learn_rules_from_states(states, k_radius)
 
-    write_rule_to_json(rule, f_name.replace(".", "_rule_"))
+    if not skip_write:
+        write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
     return rule
 
@@ -492,6 +501,33 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
     #     plot_summary(f_dir + "_summary.json")
 
 
+def test_eca_learning(f_dir, k_radius=1):
+    files = glob(f_dir)
+    results = []
+    for f in files:
+        rule = learn_rule_from_file(f, k_radius=k_radius, skip_write=True)
+        f_parts = f.split("_")
+        rule_num = int(f_parts[6])  # NOTE: idx subject to change on file renaming
+        # print(f_parts)
+        # rule_num = f_parts
+        ba = bitarray(rule["rule"])
+        ba_int = ba2int(ba)
+        print("rule:", rule_num, ba_int)
+        results.append((rule_num, ba_int, rule_num == ba_int))
+    print("len: ", len(files))
+
+    mismatches = 0
+    for expected, actual, matched in results:
+        if not matched:
+            mismatches += 1
+
+    successful_matches = len(results) - mismatches
+    print("successful_matches: ", successful_matches)
+    print("number_of_mismatches: ", mismatches)
+    print("success_rate: ", successful_matches / len(results))
+    return
+
+
 def evolve_kernel_using_de(steps, seed, mode="min", optimization_steps=None):
     # Activation function
     g = gol
@@ -697,12 +733,20 @@ parser.add_argument(
     help="Select scale type: [maj, min]",
 )
 
+parser.add_argument(
+    "--test", metavar="T", type=str, default=None, help="Test results of ECA run",
+)
+
 args = parser.parse_args()
 
 f_dir = DEFAULT_OUTDIR
 
 if args.outdir:
     f_dir = args.outdir
+
+if args.test:
+    test_eca_learning(args.test, args.kernelRadius)
+    exit(0)
 
 if args.mode == MODES[3]:
     generate_all_wolfram_eca(f_dir, args.kernelRadius)
@@ -721,6 +765,15 @@ if args.learn or args.load:
         k_radius=args.kernelRadius,
     )
     exit(0)
+
+if args.generateFromRule:
+    generate_states_from_rule_and_seed(
+        f_name=args.outdir,
+        rule=args.generateFromRule,
+        seed=args.seedFile,
+        scale_num=args.scaleNum,
+        scale_type=args.scaleType,
+    )
 
 # Mutually exclusive modes
 if args.mode == MODES[1]:
