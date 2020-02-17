@@ -122,41 +122,53 @@ def squash_piano_roll_to_chromatic_frames(states):
 def get_states_from_file(
     f_name, track_num=None, scale_num=None, scale_type="maj", k_radius=1
 ):
-    mt = load(f_name)
+    is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
+    is_json = f_name.endswith(".json")
+    if is_midi:
+        mt = load(f_name)
 
-    # convert to binary representation
-    mt.binarize()
+        # convert to binary representation
+        mt.binarize()
 
-    # ensure that the vector is 0,1 only
-    track = mt.get_merged_pianoroll(mode="any").astype(int)
+        # ensure that the vector is 0,1 only
+        track = mt.get_merged_pianoroll(mode="any").astype(int)
 
-    if track_num:
-        track = mt.tracks[track_num]
+        if track_num:
+            track = mt.tracks[track_num]
 
-    sc_num = scale_num
-    sc_type = scale_type
+        sc_num = scale_num
+        sc_type = scale_type
 
-    if scale_num != None:
-        scale_mask = get_full_scale(sc_num)
-        n = np.array(range(0, 128))
-        scale = n[scale_mask]
-        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+        if scale_num != None:
+            scale_mask = get_full_scale(sc_num)
+            n = np.array(range(0, 128))
+            scale = n[scale_mask]
+            print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
 
-    # NOTE: these are the dimensions
-    # rows = timestep, cols = keyboard
-    # print(track.shape)
-    states = []
-    for s in track:
-        # Skip rests by only taking tracks with non-zero sums
-        sum_s = np.sum(s)
-        if sum_s > 0:
-            # compress to scale
-            if sc_num != None:
-                s_compressed = squash_state_to_scale(s, scale_mask)
-                states.append(s_compressed)
-            else:
-                states.append(s)
-    states = squash_piano_roll_to_chromatic_frames(states)
+        # NOTE: these are the dimensions
+        # rows = timestep, cols = keyboard
+        # print(track.shape)
+        states = []
+        for s in track:
+            # Skip rests by only taking tracks with non-zero sums
+            sum_s = np.sum(s)
+            if sum_s > 0:
+                # compress to scale
+                if sc_num != None:
+                    s_compressed = squash_state_to_scale(s, scale_mask)
+                    states.append(s_compressed)
+                else:
+                    states.append(s)
+        states = squash_piano_roll_to_chromatic_frames(states)
+
+    elif is_json:
+        # handle json
+        with open(f_name, "r") as json_file:
+            d = json.load(json_file)
+        states = d["states"]
+    else:
+        print("File extension not supported!")
+        exit(1)
     print_states(states[0:5])
     # return
     # mets = metrics(states)
