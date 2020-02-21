@@ -1,3 +1,4 @@
 {
-    "python.formatting.provider": "black"
+    "python.formatting.provider": "black",
+    "python.pythonPath": "/Users/omardelarosa/.local/share/virtualenvs/automata-sim-n8Qsmqt6/bin/python"
 }

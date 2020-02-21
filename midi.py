@@ -19,7 +19,7 @@ from oned import (
     bin_arr_to_s,
     int_to_activation_set,
     image_from_states,
-    print_markdown_table
+    print_markdown_table,
 )
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
@@ -149,6 +149,10 @@ def generate_states_from_rule_and_seed(
         seed = np.zeros((width,), dtype=int)
         seed[floor(width / 2)] = 1  # add 1 to middle
 
+        # TODO: triad of octaves?
+        # seed[floor(width / 2) + 12] = 1  # add 1 to middle
+        # seed[floor(width / 2) - 12] = 1  # add 1 to middle
+
         # Option 0. Random seed
         # seed = np.random.rand(width).round()
 
@@ -161,7 +165,7 @@ def generate_states_from_rule_and_seed(
         rand_state = states[random_state_idx]
         rand_state_tiled = np.tile(rand_state, 128)[0:width]
         ## Option 3. Sample states from original
-        #seeds = [rand_state_tiled]
+        # seeds = [rand_state_tiled]
         # if sc_num != None:
         #     maj_triad = np.tile(np.array([1, 0, 1, 0, 1, 0, 0]), reps=11)[
         #         0 : (len(states[0]))
@@ -185,6 +189,10 @@ def generate_states_from_rule_and_seed(
         print("r_set", r_set)
         r = lambda x, k: wolfram(x, k, r_set)
         states = run(steps, seed=seed, kernel=k, f=r)
+
+        # apply a filter to the states
+        states = filter_states(states)
+
         f_name_img = f_name.replace(".", "_") + ".png"
         image_from_states(states, f_name_img)
         print_states(states[0:10])
@@ -197,6 +205,45 @@ def generate_states_from_rule_and_seed(
         write_files_from_states(states, mets, seed, [], f_name_out, g=g)
         i += 1
     return
+
+
+def filter_states(states):
+    """
+    Apply some kind of note filtering to the states
+    """
+
+    height = len(states)
+    width = len(states[0])
+    voices = 3
+
+    # generate empty states array
+    result = [np.zeros((width,)) for i in range(0, height)]
+
+    ## Strategy 1:  Follow a 1-bit path, once per "voice"
+    for v in range(0, voices):
+        cursor = 0
+        for i in range(0, height):
+            ith_state = states[i]
+            # print("ith_state", ith_state, cursor)
+            s = result[i]
+            bit = 0
+            j = cursor
+            if np.random.rand() > 0.5:
+                step = -1
+            else:
+                step = 1
+            # find location of first on bit
+            while j in range(0, width):
+                if ith_state[j]:
+                    cursor = j
+                    bit = 1
+                    break
+                j += step
+            if not bit:
+                print("No bit set!")
+            else:
+                s[cursor] = bit
+    return result
 
 
 def learn_rule_from_file(
@@ -247,7 +294,7 @@ def learn_rule_from_file(
         rule=rule,
         scale_num=sc_num,
         scale_type=sc_type,
-        states=states
+        states=states,
     )
 
     return rule, states
@@ -541,13 +588,7 @@ def test_eca_learning(f_dir, k_radius=1):
         ba_int = ba2int(ba)
         image_names[rule_num] = f_pic_name
         print("rule:", rule_num, ba_int)
-        results.append(
-            (
-                rule_num,
-                ba_int,
-                rule_num == ba_int
-            )
-        )
+        results.append((rule_num, ba_int, rule_num == ba_int))
     print("len: ", len(files))
 
     mismatches = 0
@@ -558,13 +599,7 @@ def test_eca_learning(f_dir, k_radius=1):
     results.sort(key=lambda x: x[0])
 
     # Print markdown table
-    labels = [
-       "Rule",
-       "Image",
-        "Classified As",
-        "Image",
-        "Matched"
-    ]
+    labels = ["Rule", "Image", "Classified As", "Image", "Matched"]
 
     rows = []
 
@@ -574,13 +609,13 @@ def test_eca_learning(f_dir, k_radius=1):
         if r2 in image_names:
             im2 = image_names[r2]
         else:
-            im2 = 'NOT-FOUND'
+            im2 = "NOT-FOUND"
         row = [
             r1,
             "![Rule {}]({})".format(r1, image_names[r1]),
             r2,
             "![Rule {}]({})".format(r2, im2),
-            m
+            m,
         ]
         rows.append(row)
 
