@@ -45,7 +45,7 @@ import os
 
 steps = 96
 
-beat_duration = 16
+beat_duration = 8
 
 
 # kernel
@@ -214,7 +214,7 @@ def filter_states(states):
 
     height = len(states)
     width = len(states[0])
-    voices = 3
+    voices = 2
 
     # generate empty states array
     result = [np.zeros((width,)) for i in range(0, height)]
@@ -260,14 +260,14 @@ def learn_rule_from_file(
     sc_num = scale_num
     sc_type = scale_type
 
-    if scale_num != None:
-        scale_mask = get_full_scale(sc_num)
-        n = np.array(range(0, 128))
-        scale = n[scale_mask]
-        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+    # if scale_num != None:
+    #     scale_mask = get_full_scale(sc_num)
+    #     n = np.array(range(0, 128))
+    #     scale = n[scale_mask]
+    #     print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
 
     if is_midi:
-        states = convert_midi_to_state(f_name, scale_num, scale_type)
+        states = convert_midi_to_state(f_name, None, scale_type)
     elif is_json:
         # handle json
         with open(f_name, "r") as json_file:
