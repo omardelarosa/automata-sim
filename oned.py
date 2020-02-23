@@ -185,7 +185,7 @@ def state_from_rule(x, learned_rule):
     # print("K", k)
     rule = learned_rule["rule"]
     # print("rule:", rule)
-    x_next = convolve(x, k, mode="wrap")
+    x_next = convolve(x, k, mode="constant")
     # print("x_next: ", x, "->", x_next)
     result = np.zeros(x.shape)
     for i in range(len(result)):

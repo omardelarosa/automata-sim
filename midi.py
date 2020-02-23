@@ -20,6 +20,7 @@ from oned import (
     int_to_activation_set,
     image_from_states,
     print_markdown_table,
+    encode_state,
 )
 from math import log, floor
 from aggregate import aggregate_summary, plot_summary
@@ -124,27 +125,46 @@ def squash_piano_roll_to_chromatic_frames(states):
     return s_compressed
 
 
+def learn_scale_from_twelve_note_normalized_states(states, num_octaves=11):
+    mask = np.zeros((12,), dtype=bool)
+
+    for s in states:
+        for j in range(len(s)):
+            if s[j] != 0:
+                mask[j] = True
+
+    shifted = np.roll(mask, 0)
+    scale = np.tile(shifted, num_octaves)[0:128]
+
+    return scale
+
+
 def generate_states_from_rule_and_seed(
-    f_name=None, rule=None, seed=None, scale_num=None, scale_type="maj", states=[]
+    f_name=None, rule=None, seed=[], scale_num=None, scale_type="maj", states=[]
 ):
     sc_num = scale_num
     sc_type = scale_type
 
+    if len(seed):
+        width = len(seed)
+    else:
+        width = 128
+
     if scale_num != None:
         scale_mask = get_full_scale(sc_num)
-        n = np.array(range(0, 128))
+        n = np.array(range(0, width))
         scale = n[scale_mask]
         print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
 
+    # print("WIDTH: ", width, "SC_WIDTH: ", len(scale), scale)
+
     # Option 1. ECA rule seeds
-    if scale_num != None:
-        width = 75
-    else:
-        width = 128
     # width = len(states[0])
     # seed is initial state
-    if seed != None:
-        seeds = [seed]
+    if len(seed):
+        # Squash the seed state to a scale
+        squashed_seed = squash_state_to_scale(seed, scale)
+        seeds = [squashed_seed]
     else:
         seed = np.zeros((width,), dtype=int)
         seed[floor(width / 2)] = 1  # add 1 to middle
@@ -163,7 +183,7 @@ def generate_states_from_rule_and_seed(
         random_state_idx = int(np.random.uniform(0, len(states)))
 
         rand_state = states[random_state_idx]
-        rand_state_tiled = np.tile(rand_state, 128)[0:width]
+        rand_state_tiled = np.tile(rand_state, width)[0:width]
         ## Option 3. Sample states from original
         # seeds = [rand_state_tiled]
         # if sc_num != None:
@@ -253,6 +273,7 @@ def learn_rule_from_file(
     scale_type="maj",
     k_radius=1,
     skip_write=False,
+    max_states=-1,
 ):
     is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
     is_json = f_name.endswith(".json")
@@ -260,14 +281,28 @@ def learn_rule_from_file(
     sc_num = scale_num
     sc_type = scale_type
 
-    # if scale_num != None:
-    #     scale_mask = get_full_scale(sc_num)
-    #     n = np.array(range(0, 128))
-    #     scale = n[scale_mask]
-    #     print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+    should_learn_scale_from_states = False
+
+    if scale_num != None:
+        scale_mask = get_full_scale(sc_num)
+        n = np.array(range(0, 128))
+        scale = n[scale_mask]
+        print("sc_num: {}, sc_type: {}".format(scale_num, scale_type))
+    else:
+        # Learn scale from states
+        should_learn_scale_from_states = True
+
+    unsquashed_states = []
 
     if is_midi:
+        unsquashed_states = convert_midi_to_state(
+            f_name, None, scale_type, twelve_tone_normalize=False
+        )
         states = convert_midi_to_state(f_name, None, scale_type)
+        # TODO: make this work
+        # if should_learn_scale_from_states:
+        #     scale = learn_scale_from_twelve_note_normalized_states(states)
+        #     print("LEARNED SCALE: ", scale)
     elif is_json:
         # handle json
         with open(f_name, "r") as json_file:
@@ -282,15 +317,29 @@ def learn_rule_from_file(
     print("States read from file: ", f_name)
     # print(mets, learn_rules_from_states)
 
+    if max_states > -1:
+        states = states[0:max_states]
+
     rule = learn_rules_from_states(states, k_radius)
 
     if not skip_write:
         write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
+    # Choose a state from the midi file randomly as a seed
+    if unsquashed_states:
+        state_idxs = list(range(len(unsquashed_states)))
+        # TODO: add guard against empty states
+        seed_state = unsquashed_states[np.random.choice(state_idxs)]
+        # if np.sum(seed_state) == 0:
+        #     seed_state[n]
+        seed = seed_state
+    else:
+        seed = []
+
     # TODO: remove from this function later
     generate_states_from_rule_and_seed(
         f_name=f_name,
-        seed=None,
+        seed=seed,
         rule=rule,
         scale_num=sc_num,
         scale_type=sc_type,
@@ -403,7 +452,9 @@ def plot_track(pianoroll, title="my awesome piano"):
     plt.show()
 
 
-def convert_midi_to_state(f_name, scale_num=None, scale_type="maj"):
+def convert_midi_to_state(
+    f_name, scale_num=None, scale_type="maj", twelve_tone_normalize=True
+):
     is_midi = f_name.endswith(".mid") or f_name.endswith(".midi")
 
     sc_num = scale_num
@@ -435,7 +486,9 @@ def convert_midi_to_state(f_name, scale_num=None, scale_type="maj"):
                 states.append(s_compressed)
             else:
                 states.append(s)
-        states = squash_piano_roll_to_chromatic_frames(states)
+        if twelve_tone_normalize:
+            states = squash_piano_roll_to_chromatic_frames(states)
+
         if sc_num != None:
             # Squash to scale
             states = [squash_state_to_scale(s, scale_mask[0:12]) for s in states]
@@ -571,40 +624,80 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
     #     plot_summary(f_dir + "_summary.json")
 
 
-def test_eca_learning(f_dir, k_radius=1):
+def hash_states(states):
+    states_ints = list(map(encode_state, states[0:100]))
+    # states_mat = states_ints
+    return str(states_ints)
+
+
+def test_eca_learning(f_dir, k_radius=1, max_states=100):
     files = glob(f_dir)
     results = []
     image_names = {}
+    state_hash_table = {}
+    rule_hash_table = {}
+    hash_to_rule = {}
     for f in files:
-        rule, states = learn_rule_from_file(f, k_radius=k_radius, skip_write=True)
+        rule, states = learn_rule_from_file(
+            f, k_radius=k_radius, skip_write=True, max_states=max_states
+        )
+        h = hash_states(states)
+        if h in state_hash_table:
+            state_hash_table[h].add(h)
+        else:
+            state_hash_table[h] = set([h])
+
+        # print("Hash: ", h)
         f_parts = f.split("_")
         f_pic_name = f.replace(".", "_") + ".png"
         im = image_from_states(states, f_pic_name)
         # return
         rule_num = int(f_parts[6])  # NOTE: idx subject to change on file renaming
+        hash_to_rule[h] = rule_num
         # print(f_parts)
         # rule_num = f_parts
         ba = bitarray(rule["rule"])
         ba_int = ba2int(ba)
         image_names[rule_num] = f_pic_name
+        rule_hash_table[rule_num] = h
         print("rule:", rule_num, ba_int)
-        results.append((rule_num, ba_int, rule_num == ba_int))
+        results.append((rule_num, ba_int))
     print("len: ", len(files))
 
+    # dedupe
+    results_deduped = []
+    # test for equivalences
+    for expected, actual in results:
+        exp_rule_hash = rule_hash_table[expected]
+        act_rule_hash = rule_hash_table[actual]
+        twins = state_hash_table[exp_rule_hash].union(state_hash_table[act_rule_hash])
+        is_act_in_exp = act_rule_hash in twins
+        is_exp_in_act = exp_rule_hash in twins
+        twins_rules = []
+        for t in twins:
+            twins_rules.append(hash_to_rule[t])
+        is_match = False
+
+        if is_act_in_exp or is_exp_in_act:
+            is_match = True
+        results_deduped.append((expected, actual, is_match, twins_rules))
+
+    # return
+    results = results_deduped
     mismatches = 0
-    for expected, actual, matched in results:
+    for expected, actual, matched, _ in results:
         if not matched:
             mismatches += 1
 
     results.sort(key=lambda x: x[0])
 
     # Print markdown table
-    labels = ["Rule", "Image", "Classified As", "Image", "Matched"]
+    labels = ["Rule", "Image", "Classified As", "Image", "Matched", "Twins"]
 
     rows = []
 
     for result in results:
-        r1, r2, m = result
+        r1, r2, m, twins = result
         im1 = image_names[r1]
         if r2 in image_names:
             im2 = image_names[r2]
@@ -616,6 +709,7 @@ def test_eca_learning(f_dir, k_radius=1):
             r2,
             "![Rule {}]({})".format(r2, im2),
             m,
+            "`{}`".format(str(twins)),
         ]
         rows.append(row)
 
@@ -814,6 +908,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--maxStates",
+    metavar="M",
+    type=int,
+    default=-1,
+    help="The maximum number of states to consider. (-1 for all)",
+)
+
+parser.add_argument(
     "--track",
     metavar="T",
     type=int,
@@ -845,7 +947,7 @@ if args.outdir:
     f_dir = args.outdir
 
 if args.test:
-    test_eca_learning(args.test, args.kernelRadius)
+    test_eca_learning(args.test, args.kernelRadius, args.maxStates)
     exit(0)
 
 if args.mode == MODES[3]:
