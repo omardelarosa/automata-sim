@@ -156,13 +156,14 @@ def learn_rules_from_states(states, kernel_radius=1, debug=False):
     a = []
     for ks in k_states:
         rule_str = str(ks)
+        print("rule_str: ", rule_str)
         if rule_str in rule:
             t = targets[rule_str]
+            print("t:", t)
             a.append(t)
         else:
             a.append(0)
-    if debug:
-        print("a:", a)
+    print("a:", a, "rule:", rule)
     return {"k": k, "rule": a, "k_states": k_states, "confidence_scores": rule}
 
 
@@ -426,7 +427,14 @@ def print_markdown_table(labels, rows):
 
 # TODO:
 def print_latex_table(labels, rows):
-    return
+    # labels
+    print("| " + " | ".join(labels) + " |")
+
+    # divider
+    print("| " + " | ".join(list(map(lambda x: "----", labels))) + " |")
+    for row in rows:
+        # row
+        print("" + " & ".join(list(map(str, row))) + " \\\\")
 
 
 # class OneD(Automata):

@@ -20,6 +20,7 @@ from oned import (
     int_to_activation_set,
     image_from_states,
     print_markdown_table,
+    print_latex_table,
     encode_state,
 )
 from math import log, floor
@@ -166,6 +167,8 @@ def generate_states_from_rule_and_seed(
         squashed_seed = squash_state_to_scale(seed, scale)
         seeds = [squashed_seed]
     else:
+        if scale_num != None:
+            width = 75
         seed = np.zeros((width,), dtype=int)
         seed[floor(width / 2)] = 1  # add 1 to middle
 
@@ -260,7 +263,8 @@ def filter_states(states):
                     break
                 j += step
             if not bit:
-                print("No bit set!")
+                continue
+                # print("No bit set!")
             else:
                 s[cursor] = bit
     return result
@@ -299,6 +303,7 @@ def learn_rule_from_file(
             f_name, None, scale_type, twelve_tone_normalize=False
         )
         states = convert_midi_to_state(f_name, None, scale_type)
+        # states = unsquashed_states
         # TODO: make this work
         # if should_learn_scale_from_states:
         #     scale = learn_scale_from_twelve_note_normalized_states(states)
@@ -326,15 +331,17 @@ def learn_rule_from_file(
         write_rule_to_json(rule, f_name.replace(".", "_rule_"))
 
     # Choose a state from the midi file randomly as a seed
-    if unsquashed_states:
-        state_idxs = list(range(len(unsquashed_states)))
-        # TODO: add guard against empty states
-        seed_state = unsquashed_states[np.random.choice(state_idxs)]
-        # if np.sum(seed_state) == 0:
-        #     seed_state[n]
-        seed = seed_state
-    else:
-        seed = []
+    # if unsquashed_states:
+    #     state_idxs = list(range(len(unsquashed_states)))
+    #     # TODO: add guard against empty states
+    #     seed_state = unsquashed_states[np.random.choice(state_idxs)]
+    #     # if np.sum(seed_state) == 0:
+    #     #     seed_state[n]
+    #     seed = seed_state
+    # else:
+    #     seed = []
+
+    seed = []
 
     # TODO: remove from this function later
     generate_states_from_rule_and_seed(
@@ -452,6 +459,15 @@ def plot_track(pianoroll, title="my awesome piano"):
     plt.show()
 
 
+def write_states_to_file(states, f_name):
+    states_dict = {"states": [np.array(s).astype(int).tolist() for s in states]}
+
+    with open(f_name, "w") as json_file:
+        json.dump(states_dict, json_file)
+
+    print("Wrote file: ", f_name)
+
+
 def convert_midi_to_state(
     f_name, scale_num=None, scale_type="maj", twelve_tone_normalize=True
 ):
@@ -511,22 +527,22 @@ def convert_midi_to_state(
         f_name=f_name.replace(".", "_"), ext="json"
     )
 
-    states_dict = {"states": [s.astype(int).tolist() for s in states]}
-
-    with open(json_states_file, "w") as json_file:
-        json.dump(states_dict, json_file)
+    write_states_to_file(states, f_name=json_states_file)
 
     print("Wrote file: ", json_states_file)
 
     return states
 
 
-def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
+def generate_all_wolfram_eca(
+    f_dir, neighborhood_radius=1, num_seed_pixels_activated=-1
+):
     # ECA is 1, anything greater is ???
     max_search_space_size = 5000
-
+    print("seed_bits: ", num_seed_pixels_activated)
     # kernel is 3 consequtive primes
     k = tens(neighborhood_radius * 2 + 1)
+    print("k: ", k)
 
     num_bits_kernel = 2 ** (len(k))
     print("k_size: ", num_bits_kernel)
@@ -547,8 +563,57 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
     # Width of state to test
     width = 32
     # seed is initial state
-    seed = np.zeros((width,), dtype=int)
-    seed[floor(width / 2)] = 1  # add 1 to middle
+
+    # OPTION 1:  Fully random Seed
+    # seed = np.random.rand(width).round()
+    # seed = [
+    #     1.0,
+    #     0.0,
+    #     1.0,
+    #     1.0,
+    #     1.0,
+    #     0.0,
+    #     1.0,
+    #     1.0,
+    #     0.0,
+    #     0.0,
+    #     1.0,
+    #     1.0,
+    #     0.0,
+    #     0.0,
+    #     0.0,
+    #     1.0,
+    #     1.0,
+    #     1.0,
+    #     1.0,
+    #     0.0,
+    #     0.0,
+    #     1.0,
+    #     1.0,
+    #     1.0,
+    #     0.0,
+    #     0.0,
+    #     1.0,
+    #     0.0,
+    #     1.0,
+    #     1.0,
+    #     0.0,
+    #     1.0,
+    # ]
+
+    # # OPTION 2.  N-bits
+    # if num_seed_pixels_activated > -1:
+    #     n = num_seed_pixels_activated
+    #     choices = [np.random.choice(width) for i in range(n)]
+    #     seed = np.zeros((width,), dtype=int)
+    #     for c in choices:
+    #         seed[c] = 1
+    # else:
+    #     seed = np.zeros((width,), dtype=int)
+    #     seed[floor(width / 2)] = 1  # add 1 to middle
+
+    # OPTION 3. Special states
+    seed = np.tile([1, 0], 16)
 
     actual_search_space_size = min(activations_search_space_size, max_search_space_size)
     print("actual_search_space_size (with limit applied): ", actual_search_space_size)
@@ -572,12 +637,17 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
         # NOTE: a, k must be np.arrays
         r = lambda x, k: wolfram(x, k, r_set)
         states = run(steps, seed=seed, kernel=k, f=r)
+
+        # get rule from states
+        rule = learn_rules_from_states(states)
+
+        # print_states(states[0:10])
         mets = metrics(states)
         # TODO: expand this for more than 8bits
         # n = np.packbits(a)
         # if filtering_condition(mets, states):
         #     print("activation rule found: ", n, a)
-        activations_states_mets.append((n, a, states, mets))
+        activations_states_mets.append((n, rule, states, mets))
 
     # do something with results
     leading_zeroes = int(log(activations_search_space_size, 10)) + 1
@@ -585,27 +655,33 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
     f_dir = "{}/t_{}_".format(f_dir, ts)
     i = 0
     pianorolls = []
-    for n, a, states, mets in activations_states_mets:
+    for n, rule, states, mets in activations_states_mets:
         # stringify bits
-        filename = "_rule_{}".format(fmt_idx(n, leading_zeroes),)  # activation idx
+        filename = "__rule_{}_states.json".format(
+            fmt_idx(n, leading_zeroes),
+        )  # activation idx
         f_name = f_dir + filename
-        write_files_from_eca(states, mets, k, n, f_name, title=f_name)
+        write_states_to_file(states, f_name)
 
-        # TODO: make it possible to alter parameters more easily
-        scale = C_maj_scale_ext
-        pianoroll = generate_pianoroll(states, scale=scale)
-        pianorolls.append((pianoroll, "rule_{}".format(n)))
+        write_rule_to_json(rule, f_name.replace("states.json", "_rule_"))
 
-    tracks = []
-    for pianoroll, title in pianorolls:
-        # Create a `pypianoroll.Track` instance
-        track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
-        tracks.append(track)
+        # write_files_from_eca(states, mets, k, n, f_name, title=f_name)
 
-    # Summary midi file
-    mt = Multitrack(tracks=tracks)
-    mid_file = "{f_dir}__summary.{ext}".format(f_dir=f_dir, ext="mid")
-    mt.write(mid_file)
+        # # TODO: make it possible to alter parameters more easily
+        # scale = C_maj_scale_ext
+        # pianoroll = generate_pianoroll(states, scale=scale)
+        # pianorolls.append((pianoroll, "rule_{}".format(n)))
+
+    # tracks = []
+    # for pianoroll, title in pianorolls:
+    #     # Create a `pypianoroll.Track` instance
+    #     track = Track(pianoroll=pianoroll, program=0, is_drum=False, name=title)
+    #     tracks.append(track)
+
+    # # Summary midi file
+    # mt = Multitrack(tracks=tracks)
+    # mid_file = "{f_dir}__summary.{ext}".format(f_dir=f_dir, ext="mid")
+    # mt.write(mid_file)
 
     # plot_filename = "{f_dir}__summary.{ext}".format(f_dir=f_dir, ext="pdf")
     # print("Generating plot: ", plot_filename)
@@ -617,7 +693,7 @@ def generate_all_wolfram_eca(f_dir, neighborhood_radius=1):
     # plt.show()
 
     # Aggregate results
-    aggregate_summary(f_dir)
+    # aggregate_summary(f_dir)
 
     # if plot:
     #     # Plot aggregation
@@ -630,6 +706,35 @@ def hash_states(states):
     return str(states_ints)
 
 
+def markov_states(states):
+    state_hashes = set()
+    states_ints = list(map(encode_state, states))
+    # generate state hashes
+    n = 0
+    int_to_hash = {}
+    hash_to_int = {}
+    for i in range(len(states_ints)):
+        ith_state = states_ints[i]
+        h = str(ith_state)
+        if h not in state_hashes:
+            state_hashes.add(h)
+            int_to_hash[n] = h
+            hashes_to_int[h] = n
+
+        # ith_plus_1_state = states_ints[i + 1]
+
+    cooccurences = np.zeros((n, n), dtype=int)
+    # make coocurrence matrix
+    for i in range(len(states_ints)):
+        ith_state = states_ints[i]
+        h = str(ith_state)
+        if h not in state_hashes:
+            state_hashes.add(h)
+            int_to_hash[n] = h
+            hashes_to_int[h] = n
+    return markov_table
+
+
 def test_eca_learning(f_dir, k_radius=1, max_states=100):
     files = glob(f_dir)
     results = []
@@ -637,8 +742,12 @@ def test_eca_learning(f_dir, k_radius=1, max_states=100):
     state_hash_table = {}
     rule_hash_table = {}
     hash_to_rule = {}
+    markov_model_of_states = {}
+    states_by_rule = {}
+    # generate canonical rules for eca class
+
     for f in files:
-        rule, states = learn_rule_from_file(
+        rule_from_file, states = learn_rule_from_file(
             f, k_radius=k_radius, skip_write=True, max_states=max_states
         )
         h = hash_states(states)
@@ -646,22 +755,29 @@ def test_eca_learning(f_dir, k_radius=1, max_states=100):
             state_hash_table[h].add(h)
         else:
             state_hash_table[h] = set([h])
-
+        # print("RuleFromFile: ", )
         # print("Hash: ", h)
         f_parts = f.split("_")
         f_pic_name = f.replace(".", "_") + ".png"
         im = image_from_states(states, f_pic_name)
+        print("f_parts", f_parts)
         # return
-        rule_num = int(f_parts[6])  # NOTE: idx subject to change on file renaming
+        rule_num = int(f_parts[8])  # NOTE: idx subject to change on file renaming
         hash_to_rule[h] = rule_num
         # print(f_parts)
         # rule_num = f_parts
-        ba = bitarray(rule["rule"])
+
+        # state learned rule
+        learned_rule = learn_rules_from_states(states)
+        file_rule = rule_from_file["rule"]
+        print("rules: ", learned_rule["rule"], file_rule)
+        ba = bitarray(learned_rule["rule"])
         ba_int = ba2int(ba)
         image_names[rule_num] = f_pic_name
         rule_hash_table[rule_num] = h
         print("rule:", rule_num, ba_int)
         results.append((rule_num, ba_int))
+        states_by_rule[rule_num] = states
     print("len: ", len(files))
 
     # dedupe
@@ -676,10 +792,11 @@ def test_eca_learning(f_dir, k_radius=1, max_states=100):
         twins_rules = []
         for t in twins:
             twins_rules.append(hash_to_rule[t])
-        is_match = False
+        # is_match = False
 
-        if is_act_in_exp or is_exp_in_act:
-            is_match = True
+        # if is_act_in_exp or is_exp_in_act:
+        #     is_match = True
+        is_match = expected == actual
         results_deduped.append((expected, actual, is_match, twins_rules))
 
     # return
@@ -692,7 +809,7 @@ def test_eca_learning(f_dir, k_radius=1, max_states=100):
     results.sort(key=lambda x: x[0])
 
     # Print markdown table
-    labels = ["Rule", "Image", "Classified As", "Image", "Matched", "Twins"]
+    labels = ["Rule", "Image", "Classified As", "Image", "Matched"]
 
     rows = []
 
@@ -705,20 +822,34 @@ def test_eca_learning(f_dir, k_radius=1, max_states=100):
             im2 = "NOT-FOUND"
         row = [
             r1,
-            "![Rule {}]({})".format(r1, image_names[r1]),
+            "![]({})".format(image_names[r1]),
             r2,
-            "![Rule {}]({})".format(r2, im2),
-            m,
-            "`{}`".format(str(twins)),
+            "![]({})".format(im2),
+            m
+            # "`{}`".format(str(twins)),
         ]
         rows.append(row)
 
     print_markdown_table(labels, rows)
+    # print_latex_table(labels, rows)
 
     successful_matches = len(results) - mismatches
     print("successful_matches: ", successful_matches)
     print("number_of_mismatches: ", mismatches)
     print("success_rate: ", successful_matches / len(results))
+
+    results_d = {
+        "successful_matches": successful_matches,
+        "mismatches": mismatches,
+        "success_rate": successful_matches / len(results),
+    }
+
+    f_name_results = "/".join(files[0].split("/")[0:-1]) + "/test_results.json"
+
+    print("Writing results to: ", f_name_results)
+    with open(f_name_results, "w") as json_file:
+        json.dump(results_d, json_file)
+
     return
 
 
@@ -908,6 +1039,14 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--numSeedBits",
+    metavar="S",
+    type=int,
+    default=-1,
+    help="The number of activated bits in the initial seed for wolfram mode.",
+)
+
+parser.add_argument(
     "--maxStates",
     metavar="M",
     type=int,
@@ -951,7 +1090,7 @@ if args.test:
     exit(0)
 
 if args.mode == MODES[3]:
-    generate_all_wolfram_eca(f_dir, args.kernelRadius)
+    generate_all_wolfram_eca(f_dir, args.kernelRadius, args.numSeedBits)
     exit(0)
 
 if args.convert:
